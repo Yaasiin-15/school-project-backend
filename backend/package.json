@@ -1,0 +1,16 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Backend workspace for School Management System",
+  "private": true,
+  "scripts": {
+    "dev": "cd server && npm run dev",
+    "start": "cd server && npm start",
+    "seed": "cd server && npm run seed",
+    "build": "cd server && npm run build",
+    "install": "cd server && npm install"
+  },
+  "keywords": ["school", "management", "backend"],
+  "author": "School Management Team",
+  "license": "MIT"
+}
