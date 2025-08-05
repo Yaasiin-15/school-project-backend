@@ -321,6 +321,35 @@ router.get('/me', authorize('student'), async (req, res) => {
   }
 });
 
+// @route   PUT /api/students/me
+// @desc    Update current student's profile
+// @access  Private (Student)
+router.put('/me', authorize('student'), async (req, res) => {
+  try {
+    const student = await Student.findOne({ userId: req.user._id });
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student profile not found' });
+    }
+
+    // Update student record
+    const updatedStudent = await Student.findByIdAndUpdate(
+      student._id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+
+    // Update user record with basic info
+    await User.findByIdAndUpdate(req.user._id, {
+      name: req.body.name || student.name,
+      email: req.body.email || student.email
+    });
+
+    res.json({ success: true, data: { student: updatedStudent } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to update student profile', error: error.message });
+  }
+});
+
 // @route   GET /api/students/teacher/me
 // @desc    Get all students assigned to the current teacher
 // @access  Private (Teacher)
@@ -335,6 +364,48 @@ router.get('/teacher/me', authorize('teacher'), async (req, res) => {
     res.json({ success: true, data: { students } });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch students for teacher', error: error.message });
+  }
+});
+
+
+
+// @route   GET /api/students/schedule/student/me
+// @desc    Get current student's weekly schedule
+// @access  Private (Student)
+router.get('/schedule/student/me', authorize('student'), async (req, res) => {
+  try {
+    const student = await Student.findOne({ userId: req.user._id });
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student profile not found' });
+    }
+
+    // Find the student's class
+    const Class = (await import('../models/Class.js')).default;
+    const studentClass = await Class.findOne({ 
+      students: student._id 
+    }).populate('teacherId', 'name');
+
+    // Generate a basic weekly schedule based on class subjects
+    const weeklySchedule = [];
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    const subjects = studentClass?.subjects || [];
+    
+    days.forEach((day, dayIndex) => {
+      subjects.slice(0, 3).forEach((subject, subjectIndex) => {
+        const hour = 9 + (subjectIndex * 2);
+        weeklySchedule.push({
+          day,
+          time: `${hour.toString().padStart(2, '0')}:00 - ${(hour + 1).toString().padStart(2, '0')}:00`,
+          subject,
+          teacher: studentClass?.teacherId?.name || 'TBA',
+          room: studentClass?.room || `Room ${101 + subjectIndex}`
+        });
+      });
+    });
+
+    res.json({ success: true, data: { weeklySchedule } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch student schedule', error: error.message });
   }
 });
 

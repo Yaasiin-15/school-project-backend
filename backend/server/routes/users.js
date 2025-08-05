@@ -71,4 +71,40 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
   }
 });
 
+// @route   GET /api/users/me
+// @desc    Get current user's profile
+// @access  Private
+router.get('/me', async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('-password');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    res.json({ success: true, data: { user } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch user profile', error: error.message });
+  }
+});
+
+// @route   PUT /api/users/me
+// @desc    Update current user's profile
+// @access  Private
+router.put('/me', async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      req.body,
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    res.json({ success: true, data: { user } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to update user profile', error: error.message });
+  }
+});
+
 export default router; 

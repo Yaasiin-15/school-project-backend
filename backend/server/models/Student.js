@@ -70,9 +70,9 @@ const studentSchema = new mongoose.Schema({
     enum: ['active', 'inactive', 'graduated', 'transferred'],
     default: 'active'
   },
-  avatar: {
+  profileImage: {
     type: String,
-    default: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=150&h=150'
+    default: null
   }
 }, {
   timestamps: true

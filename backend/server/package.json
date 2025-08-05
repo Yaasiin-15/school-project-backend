@@ -9,6 +9,7 @@
     "dev": "nodemon index.js",
     "server": "node index.js",
     "seed": "node scripts/seedData.js",
+    "setup-production": "node scripts/setupProduction.js",
     "build": "echo 'No build step required for Node.js'",
     "lint": "echo 'Linting not configured'"
   },

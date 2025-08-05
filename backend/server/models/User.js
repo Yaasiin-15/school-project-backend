@@ -24,9 +24,9 @@ const userSchema = new mongoose.Schema({
     enum: ['admin', 'teacher', 'student', 'parent', 'accountant'],
     default: 'student'
   },
-  avatar: {
+  profileImage: {
     type: String,
-    default: 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=150&h=150'
+    default: null
   },
   isActive: {
     type: Boolean,

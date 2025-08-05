@@ -306,17 +306,43 @@ router.get('/:id/students', async (req, res) => {
 // @access  Private (Teacher)
 router.get('/me', authorize('teacher'), async (req, res) => {
   try {
-    console.log('[DEBUG] /api/teachers/me called. req.user:', req.user);
     // Find the teacher profile by the logged-in user's ID
     const teacher = await Teacher.findOne({ userId: req.user._id });
     if (!teacher) {
-      console.warn('[WARN] No Teacher profile found for userId:', req.user._id);
       return res.status(404).json({ success: false, message: 'Teacher profile not found' });
     }
     res.json({ success: true, data: { teacher } });
   } catch (error) {
-    console.error('[ERROR] /api/teachers/me failed:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch teacher profile', error: error.message });
+  }
+});
+
+// @route   PUT /api/teachers/me
+// @desc    Update current teacher's profile
+// @access  Private (Teacher)
+router.put('/me', authorize('teacher'), async (req, res) => {
+  try {
+    const teacher = await Teacher.findOne({ userId: req.user._id });
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Teacher profile not found' });
+    }
+
+    // Update teacher record
+    const updatedTeacher = await Teacher.findByIdAndUpdate(
+      teacher._id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+
+    // Update user record with basic info
+    await User.findByIdAndUpdate(req.user._id, {
+      name: req.body.name || teacher.name,
+      email: req.body.email || teacher.email
+    });
+
+    res.json({ success: true, data: { teacher: updatedTeacher } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to update teacher profile', error: error.message });
   }
 });
 

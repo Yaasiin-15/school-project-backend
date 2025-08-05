@@ -72,9 +72,9 @@ const teacherSchema = new mongoose.Schema({
     enum: ['active', 'inactive', 'on-leave', 'terminated'],
     default: 'active'
   },
-  avatar: {
+  profileImage: {
     type: String,
-    default: 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=150&h=150'
+    default: null
   }
 }, {
   timestamps: true

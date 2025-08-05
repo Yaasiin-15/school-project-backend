@@ -27,6 +27,12 @@ import announcementRoutes from './routes/announcements.js';
 import dashboardRoutes from './routes/dashboard.js';
 import attendanceRoutes from './routes/attendance.js';
 import usersRoutes from './routes/users.js';
+import uploadRoutes from './routes/upload.js';
+import examRoutes from './routes/exams.js';
+import financeRoutes from './routes/finance.js';
+import messageRoutes from './routes/messages.js';
+import resourceRoutes from './routes/resources.js';
+import analyticsRoutes from './routes/analytics.js';
 
 // Import middleware
 import authMiddleware from './middleware/auth.js';
@@ -113,6 +119,12 @@ app.use('/api/announcements', authMiddleware, announcementRoutes);
 app.use('/api/dashboard', authMiddleware, dashboardRoutes);
 app.use('/api/attendance', authMiddleware, attendanceRoutes);
 app.use('/api/users', authMiddleware, usersRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/exams', authMiddleware, examRoutes);
+app.use('/api/finance', authMiddleware, financeRoutes);
+app.use('/api/messages', authMiddleware, messageRoutes);
+app.use('/api/resources', authMiddleware, resourceRoutes);
+app.use('/api/analytics', authMiddleware, analyticsRoutes);
 
 // Error handling middleware
 app.use(errorHandler);
