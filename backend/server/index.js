@@ -75,7 +75,11 @@ if (process.env.NODE_ENV === 'production') {
 
 // CORS Configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: [
+    'https://school-project-frontend-snowy.vercel.app',
+    'http://localhost:5173',
+    process.env.FRONTEND_URL
+  ].filter(Boolean),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
