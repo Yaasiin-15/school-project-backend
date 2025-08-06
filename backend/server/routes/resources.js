@@ -1,14 +1,22 @@
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs';
 import authMiddleware from '../middleware/auth.js';
+import Resource from '../models/Resource.js';
 
 const router = express.Router();
+
+// Ensure upload directory exists
+const uploadDir = 'uploads/resources/';
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/resources/');
+    cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -46,112 +54,111 @@ const upload = multer({
   }
 });
 
-// Mock data for demonstration
-let resources = [
-  {
-    _id: '1',
-    name: 'Mathematics Textbook Chapter 5.pdf',
-    originalName: 'Mathematics Textbook Chapter 5.pdf',
-    type: 'pdf',
-    size: 2048576,
-    uploadedBy: 'John Smith',
-    uploadedById: 'teacher1',
-    uploadDate: new Date(),
-    downloads: 45,
-    accessLevel: 'students',
-    subject: 'Mathematics',
-    grade: 'Grade 10',
-    description: 'Chapter 5 covering algebraic equations and functions',
-    filePath: '/uploads/resources/math-chapter5.pdf'
-  },
-  {
-    _id: '2',
-    name: 'Science Lab Video - Experiment 3.mp4',
-    originalName: 'Science Lab Video - Experiment 3.mp4',
-    type: 'video',
-    size: 15728640,
-    uploadedBy: 'Sarah Johnson',
-    uploadedById: 'teacher2',
-    uploadDate: new Date(Date.now() - 86400000),
-    downloads: 23,
-    accessLevel: 'teachers',
-    subject: 'Science',
-    grade: 'Grade 9',
-    description: 'Laboratory experiment demonstrating chemical reactions',
-    filePath: '/uploads/resources/science-lab-exp3.mp4'
-  },
-  {
-    _id: '3',
-    name: 'History Timeline Presentation.pptx',
-    originalName: 'History Timeline Presentation.pptx',
-    type: 'presentation',
-    size: 5242880,
-    uploadedBy: 'Mike Wilson',
-    uploadedById: 'teacher3',
-    uploadDate: new Date(Date.now() - 172800000),
-    downloads: 67,
-    accessLevel: 'public',
-    subject: 'History',
-    grade: 'Grade 8',
-    description: 'Timeline of major historical events in the 20th century',
-    filePath: '/uploads/resources/history-timeline.pptx'
-  }
-];
+// Helper function to get file type from mimetype
+const getFileType = (mimetype) => {
+  if (mimetype.includes('pdf')) return 'pdf';
+  if (mimetype.includes('word')) return 'document';
+  if (mimetype.includes('powerpoint') || mimetype.includes('presentation')) return 'presentation';
+  if (mimetype.includes('image')) return 'image';
+  if (mimetype.includes('video')) return 'video';
+  if (mimetype.includes('audio')) return 'audio';
+  return 'other';
+};
 
 // Get all resources
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const { type, accessLevel, subject, grade, search, page = 1, limit = 20 } = req.query;
+    const userRole = req.user.role;
     
-    let filteredResources = [...resources];
+    // Build query based on user access level and filters
+    let query = { isActive: true };
     
-    // Apply filters
+    // Apply access level filtering based on user role
+    const allowedAccessLevels = [];
+    switch (userRole) {
+      case 'admin':
+        allowedAccessLevels.push('public', 'students', 'teachers', 'admin');
+        break;
+      case 'teacher':
+        allowedAccessLevels.push('public', 'students', 'teachers');
+        break;
+      case 'student':
+        allowedAccessLevels.push('public', 'students');
+        break;
+      default:
+        allowedAccessLevels.push('public');
+    }
+    query.accessLevel = { $in: allowedAccessLevels };
+    
+    // Apply additional filters
     if (type && type !== 'all') {
-      filteredResources = filteredResources.filter(r => r.type === type);
+      query.type = type;
     }
     
     if (accessLevel && accessLevel !== 'all') {
-      filteredResources = filteredResources.filter(r => r.accessLevel === accessLevel);
+      query.accessLevel = accessLevel;
     }
     
     if (subject) {
-      filteredResources = filteredResources.filter(r => 
-        r.subject.toLowerCase().includes(subject.toLowerCase())
-      );
+      query.subject = { $regex: subject, $options: 'i' };
     }
     
     if (grade) {
-      filteredResources = filteredResources.filter(r => 
-        r.grade.toLowerCase().includes(grade.toLowerCase())
-      );
+      query.grade = { $regex: grade, $options: 'i' };
     }
     
     if (search) {
-      filteredResources = filteredResources.filter(r => 
-        r.name.toLowerCase().includes(search.toLowerCase()) ||
-        r.description?.toLowerCase().includes(search.toLowerCase()) ||
-        r.uploadedBy.toLowerCase().includes(search.toLowerCase())
-      );
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { originalName: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { uploadedByName: { $regex: search, $options: 'i' } },
+        { tags: { $in: [new RegExp(search, 'i')] } }
+      ];
     }
     
-    // Sort by upload date (newest first)
-    filteredResources.sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate));
+    // Get resources with pagination
+    const [resources, totalCount] = await Promise.all([
+      Resource.find(query)
+        .populate('uploadedBy', 'name profileImage')
+        .sort({ createdAt: -1 })
+        .limit(limit * 1)
+        .skip((page - 1) * limit),
+      Resource.countDocuments(query)
+    ]);
     
-    // Pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + parseInt(limit);
-    const paginatedResources = filteredResources.slice(startIndex, endIndex);
+    // Format resources for response
+    const formattedResources = resources.map(resource => ({
+      _id: resource._id,
+      name: resource.name,
+      originalName: resource.originalName,
+      type: resource.type,
+      size: resource.size,
+      formattedSize: resource.formattedSize,
+      uploadedBy: resource.uploadedByName,
+      uploadedById: resource.uploadedBy._id,
+      uploadDate: resource.createdAt,
+      downloads: resource.downloads,
+      accessLevel: resource.accessLevel,
+      subject: resource.subject,
+      grade: resource.grade,
+      description: resource.description,
+      tags: resource.tags,
+      filePath: resource.filePath
+    }));
     
     res.json({
       success: true,
-      data: paginatedResources,
+      data: formattedResources,
       pagination: {
         currentPage: parseInt(page),
-        totalPages: Math.ceil(filteredResources.length / limit),
-        totalResources: filteredResources.length
+        totalPages: Math.ceil(totalCount / limit),
+        totalResources: totalCount
       }
     });
   } catch (error) {
+    console.error('Fetch resources error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch resources',

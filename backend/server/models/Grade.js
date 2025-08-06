@@ -84,9 +84,9 @@ gradeSchema.index({ teacherId: 1 });
 gradeSchema.index({ date: -1 });
 
 // Calculate grade level based on percentage
-gradeSchema.pre('save', function(next) {
+gradeSchema.pre('save', function (next) {
   const percentage = (this.score / this.maxScore) * 100;
-  
+
   if (percentage >= 97) this.gradeLevel = 'A+';
   else if (percentage >= 93) this.gradeLevel = 'A';
   else if (percentage >= 90) this.gradeLevel = 'A-';
@@ -99,7 +99,7 @@ gradeSchema.pre('save', function(next) {
   else if (percentage >= 67) this.gradeLevel = 'D+';
   else if (percentage >= 65) this.gradeLevel = 'D';
   else this.gradeLevel = 'F';
-  
+
   next();
 });
 

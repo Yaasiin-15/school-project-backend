@@ -1,124 +1,70 @@
 import express from 'express';
 import authMiddleware from '../middleware/auth.js';
+import Message from '../models/Message.js';
+import User from '../models/User.js';
 
 const router = express.Router();
-
-// Mock data for demonstration
-let messages = [
-  {
-    _id: '1',
-    senderId: 'user1',
-    receiverId: 'user2',
-    senderName: 'John Smith',
-    message: 'Hello! How are the students doing in your class?',
-    timestamp: new Date(Date.now() - 3600000),
-    isRead: true
-  },
-  {
-    _id: '2',
-    senderId: 'user2',
-    receiverId: 'user1',
-    senderName: 'Sarah Johnson',
-    message: 'Hi! They are doing well. Most students are keeping up with the curriculum.',
-    timestamp: new Date(Date.now() - 3000000),
-    isRead: true
-  },
-  {
-    _id: '3',
-    senderId: 'user1',
-    receiverId: 'user2',
-    senderName: 'John Smith',
-    message: 'That\'s great to hear! I wanted to discuss the upcoming project.',
-    timestamp: new Date(Date.now() - 1800000),
-    isRead: false
-  }
-];
-
-let users = [
-  {
-    _id: 'user1',
-    name: 'John Smith',
-    role: 'teacher',
-    email: 'john.smith@school.edu',
-    avatar: null,
-    lastSeen: new Date(),
-    isOnline: true
-  },
-  {
-    _id: 'user2',
-    name: 'Sarah Johnson',
-    role: 'parent',
-    email: 'sarah.johnson@email.com',
-    avatar: null,
-    lastSeen: new Date(Date.now() - 300000),
-    isOnline: false
-  },
-  {
-    _id: 'user3',
-    name: 'Mike Wilson',
-    role: 'student',
-    email: 'mike.wilson@student.edu',
-    avatar: null,
-    lastSeen: new Date(Date.now() - 600000),
-    isOnline: true
-  },
-  {
-    _id: 'user4',
-    name: 'Emily Davis',
-    role: 'admin',
-    email: 'emily.davis@school.edu',
-    avatar: null,
-    lastSeen: new Date(Date.now() - 120000),
-    isOnline: true
-  }
-];
 
 // Get users for chat (excluding current user)
 router.get('/users/chat-users', authMiddleware, async (req, res) => {
   try {
-    const currentUserId = req.user.id;
+    const currentUserId = req.user._id;
     
-    // Filter out current user and add chat metadata
-    const chatUsers = users
-      .filter(user => user._id !== currentUserId)
-      .map(user => {
-        // Get last message with this user
-        const lastMessage = messages
-          .filter(msg => 
-            (msg.senderId === currentUserId && msg.receiverId === user._id) ||
-            (msg.senderId === user._id && msg.receiverId === currentUserId)
-          )
-          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
-        
-        // Count unread messages from this user
-        const unreadCount = messages.filter(msg => 
-          msg.senderId === user._id && 
-          msg.receiverId === currentUserId && 
-          !msg.isRead
-        ).length;
-        
-        return {
-          ...user,
-          lastMessage: lastMessage?.message || null,
-          lastMessageTime: lastMessage?.timestamp || null,
-          unreadCount
-        };
-      })
-      .sort((a, b) => {
-        // Sort by last message time, then by online status
-        if (a.lastMessageTime && b.lastMessageTime) {
-          return new Date(b.lastMessageTime) - new Date(a.lastMessageTime);
-        }
-        if (a.isOnline && !b.isOnline) return -1;
-        if (!a.isOnline && b.isOnline) return 1;
-        return 0;
+    // Get all users except current user
+    const users = await User.find({ 
+      _id: { $ne: currentUserId },
+      isActive: true 
+    }).select('name email role profileImage lastLogin');
+    
+    // Get chat metadata for each user
+    const chatUsersPromises = users.map(async (user) => {
+      // Get last message with this user
+      const lastMessage = await Message.findOne({
+        $or: [
+          { senderId: currentUserId, receiverId: user._id },
+          { senderId: user._id, receiverId: currentUserId }
+        ]
+      }).sort({ createdAt: -1 });
+      
+      // Count unread messages from this user
+      const unreadCount = await Message.countDocuments({
+        senderId: user._id,
+        receiverId: currentUserId,
+        isRead: false
       });
+      
+      return {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        avatar: user.profileImage,
+        lastSeen: user.lastLogin,
+        isOnline: user.lastLogin && (new Date() - user.lastLogin) < 300000, // 5 minutes
+        lastMessage: lastMessage?.message || null,
+        lastMessageTime: lastMessage?.createdAt || null,
+        unreadCount
+      };
+    });
+    
+    const chatUsers = await Promise.all(chatUsersPromises);
+    
+    // Sort by last message time, then by online status
+    chatUsers.sort((a, b) => {
+      if (a.lastMessageTime && b.lastMessageTime) {
+        return new Date(b.lastMessageTime) - new Date(a.lastMessageTime);
+      }
+      if (a.isOnline && !b.isOnline) return -1;
+      if (!a.isOnline && b.isOnline) return 1;
+      return 0;
+    });
     
     res.json({
       success: true,
       data: chatUsers
     });
   } catch (error) {
+    console.error('Fetch chat users error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch chat users',
@@ -130,41 +76,73 @@ router.get('/users/chat-users', authMiddleware, async (req, res) => {
 // Get messages between current user and another user
 router.get('/:userId', authMiddleware, async (req, res) => {
   try {
-    const currentUserId = req.user.id;
+    const currentUserId = req.user._id;
     const { userId } = req.params;
     const { page = 1, limit = 50 } = req.query;
     
     // Get messages between the two users
-    const conversation = messages
-      .filter(msg => 
-        (msg.senderId === currentUserId && msg.receiverId === userId) ||
-        (msg.senderId === userId && msg.receiverId === currentUserId)
-      )
-      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const [messages, totalCount] = await Promise.all([
+      Message.find({
+        $or: [
+          { senderId: currentUserId, receiverId: userId },
+          { senderId: userId, receiverId: currentUserId }
+        ]
+      })
+      .populate('senderId', 'name profileImage')
+      .populate('receiverId', 'name profileImage')
+      .sort({ createdAt: 1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit),
+      
+      Message.countDocuments({
+        $or: [
+          { senderId: currentUserId, receiverId: userId },
+          { senderId: userId, receiverId: currentUserId }
+        ]
+      })
+    ]);
     
     // Mark messages from the other user as read
-    messages = messages.map(msg => {
-      if (msg.senderId === userId && msg.receiverId === currentUserId) {
-        return { ...msg, isRead: true };
+    await Message.updateMany(
+      {
+        senderId: userId,
+        receiverId: currentUserId,
+        isRead: false
+      },
+      {
+        isRead: true,
+        readAt: new Date()
       }
-      return msg;
-    });
+    );
     
-    // Pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + parseInt(limit);
-    const paginatedMessages = conversation.slice(startIndex, endIndex);
+    // Format messages for response
+    const formattedMessages = messages.map(msg => ({
+      _id: msg._id,
+      senderId: msg.senderId._id,
+      receiverId: msg.receiverId._id,
+      senderName: msg.senderName,
+      receiverName: msg.receiverName,
+      message: msg.message,
+      messageType: msg.messageType,
+      attachments: msg.attachments,
+      timestamp: msg.createdAt,
+      isRead: msg.isRead,
+      readAt: msg.readAt,
+      priority: msg.priority,
+      subject: msg.subject
+    }));
     
     res.json({
       success: true,
-      data: paginatedMessages,
+      data: formattedMessages,
       pagination: {
         currentPage: parseInt(page),
-        totalPages: Math.ceil(conversation.length / limit),
-        totalMessages: conversation.length
+        totalPages: Math.ceil(totalCount / limit),
+        totalMessages: totalCount
       }
     });
   } catch (error) {
+    console.error('Fetch messages error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch messages',
@@ -176,8 +154,8 @@ router.get('/:userId', authMiddleware, async (req, res) => {
 // Send a new message
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const senderId = req.user.id;
-    const { receiverId, message } = req.body;
+    const senderId = req.user._id;
+    const { receiverId, message, messageType = 'text', priority = 'normal', subject } = req.body;
     
     if (!receiverId || !message?.trim()) {
       return res.status(400).json({
@@ -187,7 +165,7 @@ router.post('/', authMiddleware, async (req, res) => {
     }
     
     // Check if receiver exists
-    const receiver = users.find(user => user._id === receiverId);
+    const receiver = await User.findById(receiverId);
     if (!receiver) {
       return res.status(404).json({
         success: false,
@@ -195,29 +173,45 @@ router.post('/', authMiddleware, async (req, res) => {
       });
     }
     
-    const sender = users.find(user => user._id === senderId);
-    
-    const newMessage = {
-      _id: Date.now().toString(),
+    const newMessage = new Message({
       senderId,
       receiverId,
-      senderName: sender?.name || 'Unknown User',
+      senderName: req.user.name,
+      receiverName: receiver.name,
       message: message.trim(),
-      timestamp: new Date(),
-      isRead: false
-    };
+      messageType,
+      priority,
+      subject
+    });
     
-    messages.push(newMessage);
+    await newMessage.save();
+    
+    // Populate sender and receiver info
+    await newMessage.populate('senderId', 'name profileImage');
+    await newMessage.populate('receiverId', 'name profileImage');
     
     // In a real application, you would emit this message via Socket.IO
     // io.to(receiverId).emit('newMessage', newMessage);
     
     res.status(201).json({
       success: true,
-      data: newMessage,
+      data: {
+        _id: newMessage._id,
+        senderId: newMessage.senderId._id,
+        receiverId: newMessage.receiverId._id,
+        senderName: newMessage.senderName,
+        receiverName: newMessage.receiverName,
+        message: newMessage.message,
+        messageType: newMessage.messageType,
+        timestamp: newMessage.createdAt,
+        isRead: newMessage.isRead,
+        priority: newMessage.priority,
+        subject: newMessage.subject
+      },
       message: 'Message sent successfully'
     });
   } catch (error) {
+    console.error('Send message error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to send message',
@@ -229,22 +223,28 @@ router.post('/', authMiddleware, async (req, res) => {
 // Mark messages as read
 router.put('/:userId/read', authMiddleware, async (req, res) => {
   try {
-    const currentUserId = req.user.id;
+    const currentUserId = req.user._id;
     const { userId } = req.params;
     
     // Mark all messages from userId to currentUserId as read
-    messages = messages.map(msg => {
-      if (msg.senderId === userId && msg.receiverId === currentUserId) {
-        return { ...msg, isRead: true };
+    const result = await Message.updateMany(
+      {
+        senderId: userId,
+        receiverId: currentUserId,
+        isRead: false
+      },
+      {
+        isRead: true,
+        readAt: new Date()
       }
-      return msg;
-    });
+    );
     
     res.json({
       success: true,
-      message: 'Messages marked as read'
+      message: `${result.modifiedCount} messages marked as read`
     });
   } catch (error) {
+    console.error('Mark messages as read error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to mark messages as read',
@@ -256,27 +256,36 @@ router.put('/:userId/read', authMiddleware, async (req, res) => {
 // Delete a message
 router.delete('/:messageId', authMiddleware, async (req, res) => {
   try {
-    const currentUserId = req.user.id;
+    const currentUserId = req.user._id;
     const { messageId } = req.params;
     
-    const messageIndex = messages.findIndex(msg => 
-      msg._id === messageId && msg.senderId === currentUserId
-    );
+    const message = await Message.findById(messageId);
     
-    if (messageIndex === -1) {
+    if (!message) {
       return res.status(404).json({
         success: false,
-        message: 'Message not found or you are not authorized to delete it'
+        message: 'Message not found'
       });
     }
     
-    messages.splice(messageIndex, 1);
+    // Check if user is authorized to delete (sender or receiver)
+    if (message.senderId.toString() !== currentUserId.toString() && 
+        message.receiverId.toString() !== currentUserId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to delete this message'
+      });
+    }
+    
+    // Soft delete for the current user
+    await message.deleteForUser(currentUserId);
     
     res.json({
       success: true,
       message: 'Message deleted successfully'
     });
   } catch (error) {
+    console.error('Delete message error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete message',
@@ -288,17 +297,19 @@ router.delete('/:messageId', authMiddleware, async (req, res) => {
 // Get unread message count
 router.get('/unread/count', authMiddleware, async (req, res) => {
   try {
-    const currentUserId = req.user.id;
+    const currentUserId = req.user._id;
     
-    const unreadCount = messages.filter(msg => 
-      msg.receiverId === currentUserId && !msg.isRead
-    ).length;
+    const unreadCount = await Message.countDocuments({
+      receiverId: currentUserId,
+      isRead: false
+    });
     
     res.json({
       success: true,
       data: { unreadCount }
     });
   } catch (error) {
+    console.error('Get unread count error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get unread count',
@@ -310,33 +321,77 @@ router.get('/unread/count', authMiddleware, async (req, res) => {
 // Search messages
 router.get('/search/:query', authMiddleware, async (req, res) => {
   try {
-    const currentUserId = req.user.id;
+    const currentUserId = req.user._id;
     const { query } = req.params;
     const { page = 1, limit = 20 } = req.query;
     
     // Search messages where current user is sender or receiver
-    const searchResults = messages
-      .filter(msg => 
-        (msg.senderId === currentUserId || msg.receiverId === currentUserId) &&
-        msg.message.toLowerCase().includes(query.toLowerCase())
-      )
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const [searchResults, totalCount] = await Promise.all([
+      Message.find({
+        $and: [
+          {
+            $or: [
+              { senderId: currentUserId },
+              { receiverId: currentUserId }
+            ]
+          },
+          {
+            $or: [
+              { message: { $regex: query, $options: 'i' } },
+              { subject: { $regex: query, $options: 'i' } }
+            ]
+          }
+        ]
+      })
+      .populate('senderId', 'name profileImage')
+      .populate('receiverId', 'name profileImage')
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit),
+      
+      Message.countDocuments({
+        $and: [
+          {
+            $or: [
+              { senderId: currentUserId },
+              { receiverId: currentUserId }
+            ]
+          },
+          {
+            $or: [
+              { message: { $regex: query, $options: 'i' } },
+              { subject: { $regex: query, $options: 'i' } }
+            ]
+          }
+        ]
+      })
+    ]);
     
-    // Pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + parseInt(limit);
-    const paginatedResults = searchResults.slice(startIndex, endIndex);
+    // Format results
+    const formattedResults = searchResults.map(msg => ({
+      _id: msg._id,
+      senderId: msg.senderId._id,
+      receiverId: msg.receiverId._id,
+      senderName: msg.senderName,
+      receiverName: msg.receiverName,
+      message: msg.message,
+      subject: msg.subject,
+      timestamp: msg.createdAt,
+      isRead: msg.isRead,
+      priority: msg.priority
+    }));
     
     res.json({
       success: true,
-      data: paginatedResults,
+      data: formattedResults,
       pagination: {
         currentPage: parseInt(page),
-        totalPages: Math.ceil(searchResults.length / limit),
-        totalResults: searchResults.length
+        totalPages: Math.ceil(totalCount / limit),
+        totalResults: totalCount
       }
     });
   } catch (error) {
+    console.error('Search messages error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to search messages',
@@ -348,23 +403,19 @@ router.get('/search/:query', authMiddleware, async (req, res) => {
 // Update user online status
 router.put('/users/status', authMiddleware, async (req, res) => {
   try {
-    const currentUserId = req.user.id;
-    const { isOnline } = req.body;
+    const currentUserId = req.user._id;
     
-    const userIndex = users.findIndex(user => user._id === currentUserId);
-    if (userIndex !== -1) {
-      users[userIndex] = {
-        ...users[userIndex],
-        isOnline: Boolean(isOnline),
-        lastSeen: new Date()
-      };
-    }
+    // Update user's last login time to indicate they're active
+    await User.findByIdAndUpdate(currentUserId, {
+      lastLogin: new Date()
+    });
     
     res.json({
       success: true,
       message: 'Status updated successfully'
     });
   } catch (error) {
+    console.error('Update status error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update status',
