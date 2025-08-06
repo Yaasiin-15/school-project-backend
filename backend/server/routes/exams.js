@@ -1,5 +1,5 @@
 import express from 'express';
-import { auth } from '../middleware/auth.js';
+import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -38,7 +38,7 @@ let exams = [
 ];
 
 // Get all exams
-router.get('/', auth, async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
   try {
     res.json({
       success: true,
@@ -54,7 +54,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Create new exam
-router.post('/', auth, async (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
   try {
     const { title, subject, class: className, date, duration, maxMarks, instructions } = req.body;
     
@@ -88,7 +88,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // Get students for an exam
-router.get('/:examId/students', auth, async (req, res) => {
+router.get('/:examId/students', authMiddleware, async (req, res) => {
   try {
     const { examId } = req.params;
     const exam = exams.find(e => e._id === examId);
@@ -122,7 +122,7 @@ router.get('/:examId/students', auth, async (req, res) => {
 });
 
 // Save marks for an exam
-router.post('/:examId/marks', auth, async (req, res) => {
+router.post('/:examId/marks', authMiddleware, async (req, res) => {
   try {
     const { examId } = req.params;
     const { marks } = req.body;
@@ -163,7 +163,7 @@ router.post('/:examId/marks', auth, async (req, res) => {
 });
 
 // Generate report cards
-router.post('/:examId/report-cards', auth, async (req, res) => {
+router.post('/:examId/report-cards', authMiddleware, async (req, res) => {
   try {
     const { examId } = req.params;
     const exam = exams.find(e => e._id === examId);
@@ -192,7 +192,7 @@ router.post('/:examId/report-cards', auth, async (req, res) => {
 });
 
 // Update exam
-router.put('/:examId', auth, async (req, res) => {
+router.put('/:examId', authMiddleware, async (req, res) => {
   try {
     const { examId } = req.params;
     const updates = req.body;
@@ -222,7 +222,7 @@ router.put('/:examId', auth, async (req, res) => {
 });
 
 // Delete exam
-router.delete('/:examId', auth, async (req, res) => {
+router.delete('/:examId', authMiddleware, async (req, res) => {
   try {
     const { examId } = req.params;
     

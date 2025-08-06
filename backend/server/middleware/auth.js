@@ -76,3 +76,4 @@ const authorize = (...roles) => {
 
 export default authMiddleware;
 export { authorize };
+export { authMiddleware as auth };

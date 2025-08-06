@@ -1,5 +1,5 @@
 import express from 'express';
-import { auth } from '../middleware/auth.js';
+import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -103,7 +103,7 @@ const generateMockAnalytics = (range) => {
 };
 
 // Get analytics data
-router.get('/', auth, async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
   try {
     const { range = 'last6months' } = req.query;
     
@@ -126,7 +126,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Get specific analytics by type
-router.get('/:type', auth, async (req, res) => {
+router.get('/:type', authMiddleware, async (req, res) => {
   try {
     const { type } = req.params;
     const { range = 'last6months' } = req.query;
@@ -156,7 +156,7 @@ router.get('/:type', auth, async (req, res) => {
 });
 
 // Export analytics report
-router.post('/export/:type', auth, async (req, res) => {
+router.post('/export/:type', authMiddleware, async (req, res) => {
   try {
     const { type } = req.params;
     const { range = 'last6months', format = 'pdf' } = req.query;
@@ -186,7 +186,7 @@ router.post('/export/:type', auth, async (req, res) => {
 });
 
 // Get dashboard summary
-router.get('/dashboard/summary', auth, async (req, res) => {
+router.get('/dashboard/summary', authMiddleware, async (req, res) => {
   try {
     const summary = {
       totalStudents: 1250,
@@ -246,7 +246,7 @@ router.get('/dashboard/summary', auth, async (req, res) => {
 });
 
 // Get comparative analytics
-router.get('/compare/:metric', auth, async (req, res) => {
+router.get('/compare/:metric', authMiddleware, async (req, res) => {
   try {
     const { metric } = req.params;
     const { period1 = 'current', period2 = 'previous' } = req.query;
@@ -301,7 +301,7 @@ router.get('/compare/:metric', auth, async (req, res) => {
 });
 
 // Get predictive analytics
-router.get('/predictions/:type', auth, async (req, res) => {
+router.get('/predictions/:type', authMiddleware, async (req, res) => {
   try {
     const { type } = req.params;
     const { horizon = '6months' } = req.query;

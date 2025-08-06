@@ -8,6 +8,8 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "server": "node index.js",
+    "test-server": "node test-server.js",
+    "debug-server": "node start-server.js",
     "seed": "node scripts/seedData.js",
     "setup-production": "node scripts/setupProduction.js",
     "build": "echo 'No build step required for Node.js'",

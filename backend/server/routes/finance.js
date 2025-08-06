@@ -1,5 +1,5 @@
 import express from 'express';
-import { auth } from '../middleware/auth.js';
+import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -68,7 +68,7 @@ const feeStructure = [
 ];
 
 // Get finance dashboard data
-router.get('/dashboard', auth, async (req, res) => {
+router.get('/dashboard', authMiddleware, async (req, res) => {
   try {
     const totalCollected = transactions
       .filter(t => t.status === 'paid')
@@ -122,7 +122,7 @@ router.get('/dashboard', auth, async (req, res) => {
 });
 
 // Get all transactions
-router.get('/transactions', auth, async (req, res) => {
+router.get('/transactions', authMiddleware, async (req, res) => {
   try {
     const { status, studentId, page = 1, limit = 50 } = req.query;
     
@@ -160,7 +160,7 @@ router.get('/transactions', auth, async (req, res) => {
 });
 
 // Create new transaction
-router.post('/transactions', auth, async (req, res) => {
+router.post('/transactions', authMiddleware, async (req, res) => {
   try {
     const { studentId, studentName, amount, feeType, paymentMethod } = req.body;
     
@@ -193,7 +193,7 @@ router.post('/transactions', auth, async (req, res) => {
 });
 
 // Update transaction status
-router.put('/transactions/:transactionId', auth, async (req, res) => {
+router.put('/transactions/:transactionId', authMiddleware, async (req, res) => {
   try {
     const { transactionId } = req.params;
     const { status, paymentMethod } = req.body;
@@ -228,7 +228,7 @@ router.put('/transactions/:transactionId', auth, async (req, res) => {
 });
 
 // Get fee structure
-router.get('/fee-structure', auth, async (req, res) => {
+router.get('/fee-structure', authMiddleware, async (req, res) => {
   try {
     res.json({
       success: true,
@@ -244,7 +244,7 @@ router.get('/fee-structure', auth, async (req, res) => {
 });
 
 // Update fee structure
-router.put('/fee-structure/:feeId', auth, async (req, res) => {
+router.put('/fee-structure/:feeId', authMiddleware, async (req, res) => {
   try {
     const { feeId } = req.params;
     const updates = req.body;
@@ -274,7 +274,7 @@ router.put('/fee-structure/:feeId', auth, async (req, res) => {
 });
 
 // Generate invoice
-router.post('/invoice/:studentId', auth, async (req, res) => {
+router.post('/invoice/:studentId', authMiddleware, async (req, res) => {
   try {
     const { studentId } = req.params;
     
@@ -302,7 +302,7 @@ router.post('/invoice/:studentId', auth, async (req, res) => {
 });
 
 // Get financial reports
-router.get('/reports', auth, async (req, res) => {
+router.get('/reports', authMiddleware, async (req, res) => {
   try {
     const { type = 'monthly', year = new Date().getFullYear() } = req.query;
     
@@ -334,7 +334,7 @@ router.get('/reports', auth, async (req, res) => {
 });
 
 // Delete transaction
-router.delete('/transactions/:transactionId', auth, async (req, res) => {
+router.delete('/transactions/:transactionId', authMiddleware, async (req, res) => {
   try {
     const { transactionId } = req.params;
     

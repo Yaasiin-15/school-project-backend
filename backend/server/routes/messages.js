@@ -1,5 +1,5 @@
 import express from 'express';
-import { auth } from '../middleware/auth.js';
+import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -74,7 +74,7 @@ let users = [
 ];
 
 // Get users for chat (excluding current user)
-router.get('/users/chat-users', auth, async (req, res) => {
+router.get('/users/chat-users', authMiddleware, async (req, res) => {
   try {
     const currentUserId = req.user.id;
     
@@ -128,7 +128,7 @@ router.get('/users/chat-users', auth, async (req, res) => {
 });
 
 // Get messages between current user and another user
-router.get('/:userId', auth, async (req, res) => {
+router.get('/:userId', authMiddleware, async (req, res) => {
   try {
     const currentUserId = req.user.id;
     const { userId } = req.params;
@@ -174,7 +174,7 @@ router.get('/:userId', auth, async (req, res) => {
 });
 
 // Send a new message
-router.post('/', auth, async (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
   try {
     const senderId = req.user.id;
     const { receiverId, message } = req.body;
@@ -227,7 +227,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // Mark messages as read
-router.put('/:userId/read', auth, async (req, res) => {
+router.put('/:userId/read', authMiddleware, async (req, res) => {
   try {
     const currentUserId = req.user.id;
     const { userId } = req.params;
@@ -254,7 +254,7 @@ router.put('/:userId/read', auth, async (req, res) => {
 });
 
 // Delete a message
-router.delete('/:messageId', auth, async (req, res) => {
+router.delete('/:messageId', authMiddleware, async (req, res) => {
   try {
     const currentUserId = req.user.id;
     const { messageId } = req.params;
@@ -286,7 +286,7 @@ router.delete('/:messageId', auth, async (req, res) => {
 });
 
 // Get unread message count
-router.get('/unread/count', auth, async (req, res) => {
+router.get('/unread/count', authMiddleware, async (req, res) => {
   try {
     const currentUserId = req.user.id;
     
@@ -308,7 +308,7 @@ router.get('/unread/count', auth, async (req, res) => {
 });
 
 // Search messages
-router.get('/search/:query', auth, async (req, res) => {
+router.get('/search/:query', authMiddleware, async (req, res) => {
   try {
     const currentUserId = req.user.id;
     const { query } = req.params;
@@ -346,7 +346,7 @@ router.get('/search/:query', auth, async (req, res) => {
 });
 
 // Update user online status
-router.put('/users/status', auth, async (req, res) => {
+router.put('/users/status', authMiddleware, async (req, res) => {
   try {
     const currentUserId = req.user.id;
     const { isOnline } = req.body;

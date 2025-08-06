@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
-import { auth } from '../middleware/auth.js';
+import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -99,7 +99,7 @@ let resources = [
 ];
 
 // Get all resources
-router.get('/', auth, async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
   try {
     const { type, accessLevel, subject, grade, search, page = 1, limit = 20 } = req.query;
     
@@ -161,7 +161,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Upload new resource
-router.post('/upload', auth, upload.single('file'), async (req, res) => {
+router.post('/upload', authMiddleware, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -217,7 +217,7 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
 });
 
 // Download resource
-router.get('/:resourceId/download', auth, async (req, res) => {
+router.get('/:resourceId/download', authMiddleware, async (req, res) => {
   try {
     const { resourceId } = req.params;
     
@@ -269,7 +269,7 @@ router.get('/:resourceId/download', auth, async (req, res) => {
 });
 
 // Get resource details
-router.get('/:resourceId', auth, async (req, res) => {
+router.get('/:resourceId', authMiddleware, async (req, res) => {
   try {
     const { resourceId } = req.params;
     
@@ -295,7 +295,7 @@ router.get('/:resourceId', auth, async (req, res) => {
 });
 
 // Update resource
-router.put('/:resourceId', auth, async (req, res) => {
+router.put('/:resourceId', authMiddleware, async (req, res) => {
   try {
     const { resourceId } = req.params;
     const updates = req.body;
@@ -339,7 +339,7 @@ router.put('/:resourceId', auth, async (req, res) => {
 });
 
 // Delete resource
-router.delete('/:resourceId', auth, async (req, res) => {
+router.delete('/:resourceId', authMiddleware, async (req, res) => {
   try {
     const { resourceId } = req.params;
     
@@ -379,7 +379,7 @@ router.delete('/:resourceId', auth, async (req, res) => {
 });
 
 // Get resources by user
-router.get('/user/:userId', auth, async (req, res) => {
+router.get('/user/:userId', authMiddleware, async (req, res) => {
   try {
     const { userId } = req.params;
     const { page = 1, limit = 20 } = req.query;
@@ -410,7 +410,7 @@ router.get('/user/:userId', auth, async (req, res) => {
 });
 
 // Get resource statistics
-router.get('/stats/overview', auth, async (req, res) => {
+router.get('/stats/overview', authMiddleware, async (req, res) => {
   try {
     const stats = {
       totalResources: resources.length,
