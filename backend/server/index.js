@@ -57,7 +57,7 @@ if (process.env.NODE_ENV === 'production') {
       },
     },
   }));
-  
+
   // Rate limiting
   const limiter = rateLimit({
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
@@ -68,10 +68,10 @@ if (process.env.NODE_ENV === 'production') {
     }
   });
   app.use('/api/', limiter);
-  
+
   // Compression
   app.use(compression());
-  
+
   // Logging
   app.use(morgan('combined'));
 } else {
@@ -100,8 +100,8 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Health check endpoint
 app.get('/health', (_req, res) => {
-  res.status(200).json({ 
-    status: 'OK', 
+  res.status(200).json({
+    status: 'OK',
     message: 'School Management API is running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV
@@ -142,7 +142,7 @@ const startServer = async () => {
   try {
     // Connect to database
     await connectDatabase();
-    
+
     // Start server
     app.listen(PORT, () => {
       logger.info(`Server started successfully`, {
@@ -150,7 +150,7 @@ const startServer = async () => {
         environment: process.env.NODE_ENV,
         timestamp: new Date().toISOString()
       });
-      
+
       if (process.env.NODE_ENV !== 'production') {
         console.log(`🚀 Server running on port ${PORT}`);
         console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
