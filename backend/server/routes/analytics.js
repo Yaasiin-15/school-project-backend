@@ -1,105 +1,227 @@
 import express from 'express';
 import authMiddleware from '../middleware/auth.js';
+import Student from '../models/Student.js';
+import Teacher from '../models/Teacher.js';
+import Class from '../models/Class.js';
+import Grade from '../models/Grade.js';
+import Fee from '../models/Fee.js';
+import Attendance from '../models/Attendance.js';
 
 const router = express.Router();
 
-// Mock data for demonstration
-const generateMockAnalytics = (range) => {
-  const currentDate = new Date();
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// Helper function to get date range
+const getDateRange = (range) => {
+  const endDate = new Date();
+  const startDate = new Date();
   
-  // Generate attendance data based on range
-  const attendanceData = [];
-  const performanceData = [
-    { subject: 'Mathematics', average: 85.2, students: 320, trend: 2.3 },
-    { subject: 'Science', average: 88.7, students: 315, trend: 1.8 },
-    { subject: 'English', average: 82.4, students: 340, trend: -0.5 },
-    { subject: 'History', average: 79.8, students: 280, trend: 3.2 },
-    { subject: 'Geography', average: 86.1, students: 295, trend: 1.5 },
-    { subject: 'Physical Education', average: 91.3, students: 350, trend: 0.8 }
-  ];
-  
-  const financialData = [];
-  const enrollmentData = [
-    { grade: 'Grade 1', students: 120, capacity: 150, waitlist: 5 },
-    { grade: 'Grade 2', students: 115, capacity: 150, waitlist: 2 },
-    { grade: 'Grade 3', students: 125, capacity: 150, waitlist: 8 },
-    { grade: 'Grade 4', students: 118, capacity: 150, waitlist: 3 },
-    { grade: 'Grade 5', students: 122, capacity: 150, waitlist: 6 },
-    { grade: 'Grade 6', students: 108, capacity: 140, waitlist: 1 },
-    { grade: 'Grade 7', students: 112, capacity: 140, waitlist: 4 },
-    { grade: 'Grade 8', students: 105, capacity: 140, waitlist: 0 },
-    { grade: 'Grade 9', students: 98, capacity: 130, waitlist: 2 },
-    { grade: 'Grade 10', students: 95, capacity: 130, waitlist: 7 }
-  ];
-  
-  // Generate data based on range
-  let dataPoints = 6;
-  if (range === 'last7days') dataPoints = 7;
-  else if (range === 'last30days') dataPoints = 30;
-  else if (range === 'last3months') dataPoints = 3;
-  else if (range === 'lastyear') dataPoints = 12;
-  
-  for (let i = dataPoints - 1; i >= 0; i--) {
-    const date = new Date(currentDate);
-    
-    if (range === 'last7days') {
-      date.setDate(date.getDate() - i);
-      attendanceData.push({
-        date: date.toLocaleDateString(),
-        rate: 88 + Math.random() * 10
-      });
-    } else if (range === 'last30days') {
-      date.setDate(date.getDate() - i);
-      if (i % 5 === 0) { // Show every 5th day
-        attendanceData.push({
-          date: date.toLocaleDateString(),
-          rate: 88 + Math.random() * 10
-        });
-      }
-    } else {
-      date.setMonth(date.getMonth() - i);
-      attendanceData.push({
-        month: months[date.getMonth()],
-        rate: 88 + Math.random() * 10
-      });
-      
-      financialData.push({
-        month: months[date.getMonth()],
-        revenue: 70000 + Math.random() * 30000,
-        expenses: 40000 + Math.random() * 20000,
-        profit: 0 // Will be calculated
-      });
-    }
+  switch (range) {
+    case 'last7days':
+      startDate.setDate(endDate.getDate() - 7);
+      break;
+    case 'last30days':
+      startDate.setDate(endDate.getDate() - 30);
+      break;
+    case 'last3months':
+      startDate.setMonth(endDate.getMonth() - 3);
+      break;
+    case 'lastyear':
+      startDate.setFullYear(endDate.getFullYear() - 1);
+      break;
+    default: // last6months
+      startDate.setMonth(endDate.getMonth() - 6);
   }
   
-  // Calculate profit
-  financialData.forEach(item => {
-    item.profit = item.revenue - item.expenses;
-  });
+  return { startDate, endDate };
+};
+
+// Generate real analytics data from database
+const generateAnalytics = async (range) => {
+  const { startDate, endDate } = getDateRange(range);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   
-  return {
-    overview: {
-      totalStudents: enrollmentData.reduce((sum, grade) => sum + grade.students, 0),
-      totalTeachers: 85,
-      averageAttendance: 92.5,
-      totalRevenue: financialData.reduce((sum, item) => sum + item.revenue, 0),
-      growthRate: 8.3,
-      totalClasses: 45,
-      activeProjects: 12,
-      completionRate: 94.2
-    },
-    attendance: attendanceData,
-    performance: performanceData,
-    financial: financialData,
-    enrollment: enrollmentData,
-    trends: {
-      studentGrowth: 8.3,
-      attendanceChange: 2.1,
-      revenueGrowth: 12.5,
-      performanceImprovement: 3.7
+  try {
+    // Get overview data
+    const [totalStudents, totalTeachers, totalClasses] = await Promise.all([
+      Student.countDocuments({ status: 'active' }),
+      Teacher.countDocuments({ status: 'active' }),
+      Class.countDocuments({ status: 'active' })
+    ]);
+
+    // Get attendance data
+    const attendanceRecords = await Attendance.aggregate([
+      {
+        $match: {
+          date: { $gte: startDate, $lte: endDate }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: "%Y-%m-%d", date: "$date" }
+          },
+          totalRecords: { $sum: 1 },
+          presentCount: {
+            $sum: { $cond: [{ $eq: ["$status", "present"] }, 1, 0] }
+          }
+        }
+      },
+      {
+        $project: {
+          date: "$_id",
+          rate: {
+            $multiply: [
+              { $divide: ["$presentCount", "$totalRecords"] },
+              100
+            ]
+          }
+        }
+      },
+      { $sort: { date: 1 } }
+    ]);
+
+    // Get performance data by subject
+    const performanceData = await Grade.aggregate([
+      {
+        $match: {
+          date: { $gte: startDate, $lte: endDate }
+        }
+      },
+      {
+        $group: {
+          _id: "$subjectName",
+          totalScore: { $sum: "$score" },
+          totalMaxScore: { $sum: "$maxScore" },
+          studentCount: { $sum: 1 }
+        }
+      },
+      {
+        $project: {
+          subject: "$_id",
+          average: {
+            $multiply: [
+              { $divide: ["$totalScore", "$totalMaxScore"] },
+              100
+            ]
+          },
+          students: "$studentCount",
+          trend: { $literal: 0 } // Would need historical data for real trend
+        }
+      }
+    ]);
+
+    // Get financial data
+    const financialRecords = await Fee.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startDate, $lte: endDate }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            month: { $month: "$createdAt" },
+            year: { $year: "$createdAt" }
+          },
+          revenue: { $sum: "$paidAmount" },
+          totalDue: { $sum: "$amount" }
+        }
+      },
+      {
+        $project: {
+          month: {
+            $arrayElemAt: [months, { $subtract: ["$_id.month", 1] }]
+          },
+          revenue: 1,
+          expenses: { $multiply: ["$revenue", 0.6] }, // Estimate expenses as 60% of revenue
+          profit: { $multiply: ["$revenue", 0.4] }
+        }
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1 } }
+    ]);
+
+    // Get enrollment data by grade
+    const enrollmentData = await Class.aggregate([
+      {
+        $match: { status: 'active' }
+      },
+      {
+        $group: {
+          _id: "$grade",
+          students: { $sum: "$studentCount" },
+          capacity: { $sum: "$capacity" }
+        }
+      },
+      {
+        $project: {
+          grade: { $concat: ["Grade ", "$_id"] },
+          students: 1,
+          capacity: 1,
+          waitlist: { $literal: 0 } // Would need a waitlist model for real data
+        }
+      },
+      { $sort: { "_id": 1 } }
+    ]);
+
+    // Calculate average attendance
+    const avgAttendance = attendanceRecords.length > 0 
+      ? attendanceRecords.reduce((sum, record) => sum + record.rate, 0) / attendanceRecords.length
+      : 0;
+
+    // Calculate total revenue
+    const totalRevenue = financialRecords.reduce((sum, record) => sum + record.revenue, 0);
+
+    // Format attendance data based on range
+    let attendanceData = [];
+    if (range === 'last7days' || range === 'last30days') {
+      attendanceData = attendanceRecords.map(record => ({
+        date: new Date(record.date).toLocaleDateString(),
+        rate: Math.round(record.rate * 100) / 100
+      }));
+    } else {
+      // Group by month for longer ranges
+      const monthlyAttendance = {};
+      attendanceRecords.forEach(record => {
+        const date = new Date(record.date);
+        const monthKey = months[date.getMonth()];
+        if (!monthlyAttendance[monthKey]) {
+          monthlyAttendance[monthKey] = { total: 0, count: 0 };
+        }
+        monthlyAttendance[monthKey].total += record.rate;
+        monthlyAttendance[monthKey].count += 1;
+      });
+
+      attendanceData = Object.keys(monthlyAttendance).map(month => ({
+        month,
+        rate: Math.round((monthlyAttendance[month].total / monthlyAttendance[month].count) * 100) / 100
+      }));
     }
-  };
+
+    return {
+      overview: {
+        totalStudents,
+        totalTeachers,
+        averageAttendance: Math.round(avgAttendance * 100) / 100,
+        totalRevenue: Math.round(totalRevenue),
+        growthRate: 0, // Would need historical data for real growth rate
+        totalClasses,
+        activeProjects: 0, // Would need a projects model
+        completionRate: 0 // Would need completion tracking
+      },
+      attendance: attendanceData,
+      performance: performanceData,
+      financial: financialRecords,
+      enrollment: enrollmentData,
+      trends: {
+        studentGrowth: 0, // Would need historical data
+        attendanceChange: 0, // Would need historical data
+        revenueGrowth: 0, // Would need historical data
+        performanceImprovement: 0 // Would need historical data
+      }
+    };
+  } catch (error) {
+    console.error('Error generating analytics:', error);
+    throw error;
+  }
 };
 
 // Get analytics data
@@ -107,8 +229,7 @@ router.get('/', authMiddleware, async (req, res) => {
   try {
     const { range = 'last6months' } = req.query;
     
-    // In a real application, you would fetch this data from the database
-    const analyticsData = generateMockAnalytics(range);
+    const analyticsData = await generateAnalytics(range);
     
     res.json({
       success: true,
@@ -117,6 +238,7 @@ router.get('/', authMiddleware, async (req, res) => {
       generatedAt: new Date().toISOString()
     });
   } catch (error) {
+    console.error('Analytics fetch error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch analytics data',
@@ -131,7 +253,7 @@ router.get('/:type', authMiddleware, async (req, res) => {
     const { type } = req.params;
     const { range = 'last6months' } = req.query;
     
-    const analyticsData = generateMockAnalytics(range);
+    const analyticsData = await generateAnalytics(range);
     
     if (!analyticsData[type]) {
       return res.status(404).json({
@@ -147,9 +269,10 @@ router.get('/:type', authMiddleware, async (req, res) => {
       range
     });
   } catch (error) {
+    console.error(`${type} analytics fetch error:`, error);
     res.status(500).json({
       success: false,
-      message: `Failed to fetch ${req.params.type} analytics`,
+      message: `Failed to fetch ${type} analytics`,
       error: error.message
     });
   }
@@ -188,48 +311,170 @@ router.post('/export/:type', authMiddleware, async (req, res) => {
 // Get dashboard summary
 router.get('/dashboard/summary', authMiddleware, async (req, res) => {
   try {
+    const [totalStudents, totalTeachers, totalClasses] = await Promise.all([
+      Student.countDocuments({ status: 'active' }),
+      Teacher.countDocuments({ status: 'active' }),
+      Class.countDocuments({ status: 'active' })
+    ]);
+
+    // Get recent activities from database
+    const recentStudents = await Student.find({ status: 'active' })
+      .sort({ createdAt: -1 })
+      .limit(3)
+      .select('name class createdAt');
+
+    const recentGrades = await Grade.find()
+      .sort({ createdAt: -1 })
+      .limit(2)
+      .populate('studentId', 'name')
+      .select('subjectName score maxScore createdAt');
+
+    const recentFees = await Fee.find({ status: 'paid' })
+      .sort({ paidDate: -1 })
+      .limit(2)
+      .select('studentName amount paidDate');
+
+    // Calculate average attendance for the last week
+    const lastWeek = new Date();
+    lastWeek.setDate(lastWeek.getDate() - 7);
+    
+    const attendanceStats = await Attendance.aggregate([
+      {
+        $match: {
+          date: { $gte: lastWeek }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalRecords: { $sum: 1 },
+          presentCount: {
+            $sum: { $cond: [{ $eq: ["$status", "present"] }, 1, 0] }
+          }
+        }
+      }
+    ]);
+
+    const averageAttendance = attendanceStats.length > 0 
+      ? Math.round((attendanceStats[0].presentCount / attendanceStats[0].totalRecords) * 100 * 100) / 100
+      : 0;
+
+    // Build recent activities
+    const recentActivities = [];
+    
+    recentStudents.forEach((student, index) => {
+      recentActivities.push({
+        id: `enrollment_${index}`,
+        type: 'enrollment',
+        message: `New student ${student.name} enrolled in ${student.class}`,
+        timestamp: student.createdAt,
+        icon: 'user-plus'
+      });
+    });
+
+    recentGrades.forEach((grade, index) => {
+      const percentage = Math.round((grade.score / grade.maxScore) * 100);
+      recentActivities.push({
+        id: `grade_${index}`,
+        type: 'performance',
+        message: `${grade.studentId?.name || 'Student'} scored ${percentage}% in ${grade.subjectName}`,
+        timestamp: grade.createdAt,
+        icon: 'trending-up'
+      });
+    });
+
+    recentFees.forEach((fee, index) => {
+      recentActivities.push({
+        id: `payment_${index}`,
+        type: 'financial',
+        message: `${fee.studentName} paid $${fee.amount}`,
+        timestamp: fee.paidDate,
+        icon: 'dollar-sign'
+      });
+    });
+
+    // Sort activities by timestamp
+    recentActivities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    // Generate alerts based on real data
+    const alerts = [];
+    
+    // Check for low attendance classes
+    const lowAttendanceClasses = await Attendance.aggregate([
+      {
+        $match: {
+          date: { $gte: lastWeek }
+        }
+      },
+      {
+        $lookup: {
+          from: 'students',
+          localField: 'studentId',
+          foreignField: '_id',
+          as: 'student'
+        }
+      },
+      {
+        $unwind: '$student'
+      },
+      {
+        $group: {
+          _id: '$student.class',
+          totalRecords: { $sum: 1 },
+          presentCount: {
+            $sum: { $cond: [{ $eq: ["$status", "present"] }, 1, 0] }
+          }
+        }
+      },
+      {
+        $project: {
+          class: '$_id',
+          attendanceRate: {
+            $multiply: [
+              { $divide: ["$presentCount", "$totalRecords"] },
+              100
+            ]
+          }
+        }
+      },
+      {
+        $match: {
+          attendanceRate: { $lt: 90 }
+        }
+      }
+    ]);
+
+    lowAttendanceClasses.forEach((classData, index) => {
+      alerts.push({
+        id: `attendance_${index}`,
+        type: 'warning',
+        message: `${classData.class} attendance below 90% this week (${Math.round(classData.attendanceRate)}%)`,
+        priority: 'medium'
+      });
+    });
+
+    // Check for overdue fees
+    const overdueFees = await Fee.countDocuments({ 
+      status: 'overdue',
+      dueDate: { $lt: new Date() }
+    });
+
+    if (overdueFees > 0) {
+      alerts.push({
+        id: 'overdue_fees',
+        type: 'warning',
+        message: `${overdueFees} students have overdue fees`,
+        priority: 'high'
+      });
+    }
+
     const summary = {
-      totalStudents: 1250,
-      totalTeachers: 85,
-      totalClasses: 45,
-      averageAttendance: 92.5,
-      recentActivities: [
-        {
-          id: 1,
-          type: 'enrollment',
-          message: 'New student enrolled in Grade 10-A',
-          timestamp: new Date(Date.now() - 3600000),
-          icon: 'user-plus'
-        },
-        {
-          id: 2,
-          type: 'performance',
-          message: 'Mathematics class average improved by 3.2%',
-          timestamp: new Date(Date.now() - 7200000),
-          icon: 'trending-up'
-        },
-        {
-          id: 3,
-          type: 'financial',
-          message: 'Monthly revenue target achieved',
-          timestamp: new Date(Date.now() - 10800000),
-          icon: 'dollar-sign'
-        }
-      ],
-      alerts: [
-        {
-          id: 1,
-          type: 'warning',
-          message: 'Grade 3 attendance below 90% this week',
-          priority: 'medium'
-        },
-        {
-          id: 2,
-          type: 'info',
-          message: '5 students on waitlist for Grade 10',
-          priority: 'low'
-        }
-      ]
+      totalStudents,
+      totalTeachers,
+      totalClasses,
+      averageAttendance,
+      recentActivities: recentActivities.slice(0, 5),
+      alerts: alerts.slice(0, 5)
     };
     
     res.json({
@@ -237,6 +482,7 @@ router.get('/dashboard/summary', authMiddleware, async (req, res) => {
       data: summary
     });
   } catch (error) {
+    console.error('Dashboard summary error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch dashboard summary',
@@ -249,49 +495,196 @@ router.get('/dashboard/summary', authMiddleware, async (req, res) => {
 router.get('/compare/:metric', authMiddleware, async (req, res) => {
   try {
     const { metric } = req.params;
-    const { period1 = 'current', period2 = 'previous' } = req.query;
     
-    // Mock comparative data
-    const comparativeData = {
-      attendance: {
-        current: { value: 92.5, period: 'This Month' },
-        previous: { value: 89.8, period: 'Last Month' },
-        change: 2.7,
-        trend: 'up'
-      },
-      performance: {
-        current: { value: 85.3, period: 'This Semester' },
-        previous: { value: 82.1, period: 'Last Semester' },
-        change: 3.2,
-        trend: 'up'
-      },
-      revenue: {
-        current: { value: 485000, period: 'This Year' },
-        previous: { value: 432000, period: 'Last Year' },
-        change: 12.3,
-        trend: 'up'
-      },
-      enrollment: {
-        current: { value: 1250, period: 'Current' },
-        previous: { value: 1154, period: 'Last Year' },
-        change: 8.3,
-        trend: 'up'
-      }
-    };
+    const currentDate = new Date();
+    const lastMonth = new Date();
+    lastMonth.setMonth(currentDate.getMonth() - 1);
     
-    if (!comparativeData[metric]) {
-      return res.status(404).json({
-        success: false,
-        message: `Metric '${metric}' not found`
-      });
+    const lastYear = new Date();
+    lastYear.setFullYear(currentDate.getFullYear() - 1);
+    
+    let comparativeData = {};
+    
+    switch (metric) {
+      case 'attendance':
+        const [currentAttendance, previousAttendance] = await Promise.all([
+          Attendance.aggregate([
+            {
+              $match: {
+                date: { $gte: lastMonth, $lte: currentDate }
+              }
+            },
+            {
+              $group: {
+                _id: null,
+                totalRecords: { $sum: 1 },
+                presentCount: {
+                  $sum: { $cond: [{ $eq: ["$status", "present"] }, 1, 0] }
+                }
+              }
+            }
+          ]),
+          Attendance.aggregate([
+            {
+              $match: {
+                date: { 
+                  $gte: new Date(lastMonth.getFullYear(), lastMonth.getMonth() - 1, 1),
+                  $lt: lastMonth
+                }
+              }
+            },
+            {
+              $group: {
+                _id: null,
+                totalRecords: { $sum: 1 },
+                presentCount: {
+                  $sum: { $cond: [{ $eq: ["$status", "present"] }, 1, 0] }
+                }
+              }
+            }
+          ])
+        ]);
+        
+        const currentRate = currentAttendance[0] ? (currentAttendance[0].presentCount / currentAttendance[0].totalRecords) * 100 : 0;
+        const previousRate = previousAttendance[0] ? (previousAttendance[0].presentCount / previousAttendance[0].totalRecords) * 100 : 0;
+        
+        comparativeData = {
+          current: { value: Math.round(currentRate * 100) / 100, period: 'This Month' },
+          previous: { value: Math.round(previousRate * 100) / 100, period: 'Last Month' },
+          change: Math.round((currentRate - previousRate) * 100) / 100,
+          trend: currentRate >= previousRate ? 'up' : 'down'
+        };
+        break;
+        
+      case 'performance':
+        const [currentPerformance, previousPerformance] = await Promise.all([
+          Grade.aggregate([
+            {
+              $match: {
+                date: { $gte: lastMonth, $lte: currentDate }
+              }
+            },
+            {
+              $group: {
+                _id: null,
+                totalScore: { $sum: "$score" },
+                totalMaxScore: { $sum: "$maxScore" }
+              }
+            }
+          ]),
+          Grade.aggregate([
+            {
+              $match: {
+                date: { 
+                  $gte: new Date(lastMonth.getFullYear(), lastMonth.getMonth() - 1, 1),
+                  $lt: lastMonth
+                }
+              }
+            },
+            {
+              $group: {
+                _id: null,
+                totalScore: { $sum: "$score" },
+                totalMaxScore: { $sum: "$maxScore" }
+              }
+            }
+          ])
+        ]);
+        
+        const currentAvg = currentPerformance[0] ? (currentPerformance[0].totalScore / currentPerformance[0].totalMaxScore) * 100 : 0;
+        const previousAvg = previousPerformance[0] ? (previousPerformance[0].totalScore / previousPerformance[0].totalMaxScore) * 100 : 0;
+        
+        comparativeData = {
+          current: { value: Math.round(currentAvg * 100) / 100, period: 'This Month' },
+          previous: { value: Math.round(previousAvg * 100) / 100, period: 'Last Month' },
+          change: Math.round((currentAvg - previousAvg) * 100) / 100,
+          trend: currentAvg >= previousAvg ? 'up' : 'down'
+        };
+        break;
+        
+      case 'revenue':
+        const [currentRevenue, previousRevenue] = await Promise.all([
+          Fee.aggregate([
+            {
+              $match: {
+                paidDate: { $gte: lastMonth, $lte: currentDate },
+                status: 'paid'
+              }
+            },
+            {
+              $group: {
+                _id: null,
+                total: { $sum: "$paidAmount" }
+              }
+            }
+          ]),
+          Fee.aggregate([
+            {
+              $match: {
+                paidDate: { 
+                  $gte: new Date(lastMonth.getFullYear(), lastMonth.getMonth() - 1, 1),
+                  $lt: lastMonth
+                },
+                status: 'paid'
+              }
+            },
+            {
+              $group: {
+                _id: null,
+                total: { $sum: "$paidAmount" }
+              }
+            }
+          ])
+        ]);
+        
+        const currentRev = currentRevenue[0]?.total || 0;
+        const previousRev = previousRevenue[0]?.total || 0;
+        const revenueChange = previousRev > 0 ? ((currentRev - previousRev) / previousRev) * 100 : 0;
+        
+        comparativeData = {
+          current: { value: currentRev, period: 'This Month' },
+          previous: { value: previousRev, period: 'Last Month' },
+          change: Math.round(revenueChange * 100) / 100,
+          trend: currentRev >= previousRev ? 'up' : 'down'
+        };
+        break;
+        
+      case 'enrollment':
+        const [currentEnrollment, previousEnrollment] = await Promise.all([
+          Student.countDocuments({ 
+            status: 'active',
+            createdAt: { $lte: currentDate }
+          }),
+          Student.countDocuments({ 
+            status: 'active',
+            createdAt: { $lte: lastYear }
+          })
+        ]);
+        
+        const enrollmentChange = previousEnrollment > 0 ? ((currentEnrollment - previousEnrollment) / previousEnrollment) * 100 : 0;
+        
+        comparativeData = {
+          current: { value: currentEnrollment, period: 'Current' },
+          previous: { value: previousEnrollment, period: 'Last Year' },
+          change: Math.round(enrollmentChange * 100) / 100,
+          trend: currentEnrollment >= previousEnrollment ? 'up' : 'down'
+        };
+        break;
+        
+      default:
+        return res.status(404).json({
+          success: false,
+          message: `Metric '${metric}' not found`
+        });
     }
     
     res.json({
       success: true,
-      data: comparativeData[metric],
+      data: comparativeData,
       metric
     });
   } catch (error) {
+    console.error('Comparative analytics error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch comparative analytics',
@@ -306,66 +699,172 @@ router.get('/predictions/:type', authMiddleware, async (req, res) => {
     const { type } = req.params;
     const { horizon = '6months' } = req.query;
     
-    // Mock predictive data
-    const predictions = {
-      enrollment: {
-        current: 1250,
-        predicted: 1350,
-        confidence: 85,
-        factors: ['Historical growth', 'Marketing campaigns', 'Capacity expansion'],
-        timeline: [
-          { month: 'Jul', predicted: 1265 },
-          { month: 'Aug', predicted: 1280 },
-          { month: 'Sep', predicted: 1295 },
-          { month: 'Oct', predicted: 1310 },
-          { month: 'Nov', predicted: 1325 },
-          { month: 'Dec', predicted: 1350 }
-        ]
-      },
-      revenue: {
-        current: 485000,
-        predicted: 545000,
-        confidence: 78,
-        factors: ['Enrollment growth', 'Fee adjustments', 'Additional programs'],
-        timeline: [
-          { month: 'Jul', predicted: 495000 },
-          { month: 'Aug', predicted: 505000 },
-          { month: 'Sep', predicted: 515000 },
-          { month: 'Oct', predicted: 525000 },
-          { month: 'Nov', predicted: 535000 },
-          { month: 'Dec', predicted: 545000 }
-        ]
-      },
-      performance: {
-        current: 85.3,
-        predicted: 87.8,
-        confidence: 72,
-        factors: ['Teacher training', 'New curriculum', 'Technology integration'],
-        timeline: [
-          { month: 'Jul', predicted: 85.6 },
-          { month: 'Aug', predicted: 86.0 },
-          { month: 'Sep', predicted: 86.4 },
-          { month: 'Oct', predicted: 86.8 },
-          { month: 'Nov', predicted: 87.2 },
-          { month: 'Dec', predicted: 87.8 }
-        ]
-      }
-    };
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const currentDate = new Date();
     
-    if (!predictions[type]) {
-      return res.status(404).json({
-        success: false,
-        message: `Prediction type '${type}' not found`
-      });
+    let predictions = {};
+    
+    switch (type) {
+      case 'enrollment':
+        const currentEnrollment = await Student.countDocuments({ status: 'active' });
+        
+        // Simple linear prediction based on historical growth
+        const lastYearEnrollment = await Student.countDocuments({ 
+          status: 'active',
+          createdAt: { $lte: new Date(currentDate.getFullYear() - 1, currentDate.getMonth(), currentDate.getDate()) }
+        });
+        
+        const growthRate = lastYearEnrollment > 0 ? (currentEnrollment - lastYearEnrollment) / lastYearEnrollment : 0.05;
+        const monthlyGrowth = growthRate / 12;
+        
+        const enrollmentTimeline = [];
+        for (let i = 1; i <= 6; i++) {
+          const futureDate = new Date(currentDate);
+          futureDate.setMonth(currentDate.getMonth() + i);
+          const predicted = Math.round(currentEnrollment * (1 + monthlyGrowth * i));
+          
+          enrollmentTimeline.push({
+            month: months[futureDate.getMonth()],
+            predicted
+          });
+        }
+        
+        predictions = {
+          current: currentEnrollment,
+          predicted: enrollmentTimeline[enrollmentTimeline.length - 1].predicted,
+          confidence: 75,
+          factors: ['Historical growth trends', 'Seasonal enrollment patterns', 'Current capacity'],
+          timeline: enrollmentTimeline
+        };
+        break;
+        
+      case 'revenue':
+        const currentMonthRevenue = await Fee.aggregate([
+          {
+            $match: {
+              paidDate: { 
+                $gte: new Date(currentDate.getFullYear(), currentDate.getMonth(), 1),
+                $lte: currentDate
+              },
+              status: 'paid'
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: "$paidAmount" }
+            }
+          }
+        ]);
+        
+        const currentRevenue = currentMonthRevenue[0]?.total || 0;
+        
+        // Get average monthly revenue for prediction
+        const avgMonthlyRevenue = await Fee.aggregate([
+          {
+            $match: {
+              status: 'paid',
+              paidDate: { $gte: new Date(currentDate.getFullYear() - 1, currentDate.getMonth(), 1) }
+            }
+          },
+          {
+            $group: {
+              _id: {
+                year: { $year: "$paidDate" },
+                month: { $month: "$paidDate" }
+              },
+              monthlyTotal: { $sum: "$paidAmount" }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              avgRevenue: { $avg: "$monthlyTotal" }
+            }
+          }
+        ]);
+        
+        const baseRevenue = avgMonthlyRevenue[0]?.avgRevenue || currentRevenue || 50000;
+        const revenueGrowthRate = 0.02; // 2% monthly growth assumption
+        
+        const revenueTimeline = [];
+        for (let i = 1; i <= 6; i++) {
+          const futureDate = new Date(currentDate);
+          futureDate.setMonth(currentDate.getMonth() + i);
+          const predicted = Math.round(baseRevenue * Math.pow(1 + revenueGrowthRate, i));
+          
+          revenueTimeline.push({
+            month: months[futureDate.getMonth()],
+            predicted
+          });
+        }
+        
+        predictions = {
+          current: currentRevenue,
+          predicted: revenueTimeline[revenueTimeline.length - 1].predicted,
+          confidence: 68,
+          factors: ['Historical revenue patterns', 'Enrollment projections', 'Fee structure changes'],
+          timeline: revenueTimeline
+        };
+        break;
+        
+      case 'performance':
+        const currentPerformance = await Grade.aggregate([
+          {
+            $match: {
+              date: { $gte: new Date(currentDate.getFullYear(), currentDate.getMonth(), 1) }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalScore: { $sum: "$score" },
+              totalMaxScore: { $sum: "$maxScore" }
+            }
+          }
+        ]);
+        
+        const currentAvg = currentPerformance[0] ? 
+          (currentPerformance[0].totalScore / currentPerformance[0].totalMaxScore) * 100 : 75;
+        
+        const performanceImprovement = 0.3; // 0.3% monthly improvement assumption
+        
+        const performanceTimeline = [];
+        for (let i = 1; i <= 6; i++) {
+          const futureDate = new Date(currentDate);
+          futureDate.setMonth(currentDate.getMonth() + i);
+          const predicted = Math.round((currentAvg + (performanceImprovement * i)) * 100) / 100;
+          
+          performanceTimeline.push({
+            month: months[futureDate.getMonth()],
+            predicted: Math.min(predicted, 100) // Cap at 100%
+          });
+        }
+        
+        predictions = {
+          current: Math.round(currentAvg * 100) / 100,
+          predicted: performanceTimeline[performanceTimeline.length - 1].predicted,
+          confidence: 65,
+          factors: ['Historical performance trends', 'Teaching improvements', 'Student engagement initiatives'],
+          timeline: performanceTimeline
+        };
+        break;
+        
+      default:
+        return res.status(404).json({
+          success: false,
+          message: `Prediction type '${type}' not found`
+        });
     }
     
     res.json({
       success: true,
-      data: predictions[type],
+      data: predictions,
       type,
       horizon
     });
   } catch (error) {
+    console.error('Predictive analytics error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch predictive analytics',

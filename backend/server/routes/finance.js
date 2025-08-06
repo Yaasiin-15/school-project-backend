@@ -1,118 +1,103 @@
 import express from 'express';
 import authMiddleware from '../middleware/auth.js';
+import Fee from '../models/Fee.js';
+import Student from '../models/Student.js';
 
 const router = express.Router();
-
-// Mock data for demonstration
-let transactions = [
-  {
-    _id: '1',
-    studentId: 'STU001',
-    studentName: 'John Doe',
-    amount: 5000,
-    feeType: 'Tuition Fee',
-    status: 'paid',
-    date: new Date(),
-    paymentMethod: 'Bank Transfer',
-    invoiceNumber: 'INV-001'
-  },
-  {
-    _id: '2',
-    studentId: 'STU002',
-    studentName: 'Jane Smith',
-    amount: 3000,
-    feeType: 'Library Fee',
-    status: 'pending',
-    date: new Date(Date.now() - 86400000),
-    paymentMethod: 'Cash',
-    invoiceNumber: 'INV-002'
-  },
-  {
-    _id: '3',
-    studentId: 'STU003',
-    studentName: 'Mike Johnson',
-    amount: 7500,
-    feeType: 'Annual Fee',
-    status: 'overdue',
-    date: new Date(Date.now() - 2592000000),
-    paymentMethod: 'Online',
-    invoiceNumber: 'INV-003'
-  }
-];
-
-const feeStructure = [
-  {
-    _id: '1',
-    class: 'Grade 1-5',
-    tuitionFee: 5000,
-    libraryFee: 500,
-    labFee: 300,
-    sportsFee: 200
-  },
-  {
-    _id: '2',
-    class: 'Grade 6-8',
-    tuitionFee: 6000,
-    libraryFee: 600,
-    labFee: 400,
-    sportsFee: 300
-  },
-  {
-    _id: '3',
-    class: 'Grade 9-10',
-    tuitionFee: 7000,
-    libraryFee: 700,
-    labFee: 500,
-    sportsFee: 400
-  }
-];
 
 // Get finance dashboard data
 router.get('/dashboard', authMiddleware, async (req, res) => {
   try {
-    const totalCollected = transactions
-      .filter(t => t.status === 'paid')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const totalPending = transactions
-      .filter(t => t.status === 'pending')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const overdueAmount = transactions
-      .filter(t => t.status === 'overdue')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const currentMonth = new Date().getMonth();
-    const monthlyRevenue = transactions
-      .filter(t => t.status === 'paid' && new Date(t.date).getMonth() === currentMonth)
-      .reduce((sum, t) => sum + t.amount, 0);
-    
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth();
+    const currentYear = currentDate.getFullYear();
+
+    // Get financial statistics
+    const [totalCollected, totalPending, overdueAmount, monthlyRevenue] = await Promise.all([
+      Fee.aggregate([
+        { $match: { status: 'paid' } },
+        { $group: { _id: null, total: { $sum: '$paidAmount' } } }
+      ]),
+      Fee.aggregate([
+        { $match: { status: 'pending' } },
+        { $group: { _id: null, total: { $sum: { $subtract: ['$amount', '$paidAmount'] } } } }
+      ]),
+      Fee.aggregate([
+        { $match: { status: 'overdue' } },
+        { $group: { _id: null, total: { $sum: { $subtract: ['$amount', '$paidAmount'] } } } }
+      ]),
+      Fee.aggregate([
+        {
+          $match: {
+            status: 'paid',
+            paidDate: {
+              $gte: new Date(currentYear, currentMonth, 1),
+              $lte: currentDate
+            }
+          }
+        },
+        { $group: { _id: null, total: { $sum: '$paidAmount' } } }
+      ])
+    ]);
+
     // Generate monthly revenue data for the last 6 months
-    const monthlyRevenueData = [];
+    const monthlyRevenueData = await Fee.aggregate([
+      {
+        $match: {
+          status: 'paid',
+          paidDate: {
+            $gte: new Date(currentYear, currentMonth - 5, 1),
+            $lte: currentDate
+          }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$paidDate' },
+            month: { $month: '$paidDate' }
+          },
+          revenue: { $sum: '$paidAmount' }
+        }
+      },
+      {
+        $sort: { '_id.year': 1, '_id.month': 1 }
+      }
+    ]);
+
+    // Format monthly data
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
+    const formattedMonthlyData = [];
+
     for (let i = 5; i >= 0; i--) {
-      const monthIndex = (currentMonth - i + 12) % 12;
-      const revenue = Math.floor(Math.random() * 20000) + 30000; // Mock data
-      monthlyRevenueData.push({
-        month: months[monthIndex],
-        revenue
+      const targetDate = new Date(currentYear, currentMonth - i, 1);
+      const targetYear = targetDate.getFullYear();
+      const targetMonth = targetDate.getMonth() + 1;
+
+      const monthData = monthlyRevenueData.find(
+        item => item._id.year === targetYear && item._id.month === targetMonth
+      );
+
+      formattedMonthlyData.push({
+        month: months[targetDate.getMonth()],
+        revenue: monthData ? monthData.revenue : 0
       });
     }
-    
+
     res.json({
       success: true,
       data: {
         stats: {
-          totalCollected,
-          totalPending,
-          monthlyRevenue,
-          overdueAmount
+          totalCollected: totalCollected[0]?.total || 0,
+          totalPending: totalPending[0]?.total || 0,
+          monthlyRevenue: monthlyRevenue[0]?.total || 0,
+          overdueAmount: overdueAmount[0]?.total || 0
         },
-        monthlyRevenue: monthlyRevenueData
+        monthlyRevenue: formattedMonthlyData
       }
     });
   } catch (error) {
+    console.error('Finance dashboard error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch finance dashboard data',
@@ -125,32 +110,54 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
 router.get('/transactions', authMiddleware, async (req, res) => {
   try {
     const { status, studentId, page = 1, limit = 50 } = req.query;
-    
-    let filteredTransactions = [...transactions];
-    
+
+    const query = {};
     if (status && status !== 'all') {
-      filteredTransactions = filteredTransactions.filter(t => t.status === status);
+      query.status = status;
     }
-    
     if (studentId) {
-      filteredTransactions = filteredTransactions.filter(t => t.studentId === studentId);
+      query.studentId = studentId;
     }
-    
-    // Pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + parseInt(limit);
-    const paginatedTransactions = filteredTransactions.slice(startIndex, endIndex);
-    
+
+    const [fees, totalCount] = await Promise.all([
+      Fee.find(query)
+        .populate('studentId', 'name studentId')
+        .sort({ createdAt: -1 })
+        .limit(limit * 1)
+        .skip((page - 1) * limit),
+      Fee.countDocuments(query)
+    ]);
+
+    // Format transactions
+    const transactions = fees.map(fee => ({
+      _id: fee._id,
+      studentId: fee.studentId?.studentId || fee.studentId,
+      studentName: fee.studentName,
+      amount: fee.amount,
+      paidAmount: fee.paidAmount,
+      feeType: fee.type,
+      status: fee.status,
+      date: fee.createdAt,
+      dueDate: fee.dueDate,
+      paidDate: fee.paidDate,
+      paymentMethod: fee.paymentMethod,
+      invoiceNumber: fee.invoiceNumber,
+      term: fee.term,
+      discount: fee.discount,
+      lateFee: fee.lateFee
+    }));
+
     res.json({
       success: true,
-      data: paginatedTransactions,
+      data: transactions,
       pagination: {
         currentPage: parseInt(page),
-        totalPages: Math.ceil(filteredTransactions.length / limit),
-        totalTransactions: filteredTransactions.length
+        totalPages: Math.ceil(totalCount / limit),
+        totalTransactions: totalCount
       }
     });
   } catch (error) {
+    console.error('Fetch transactions error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch transactions',
@@ -159,31 +166,75 @@ router.get('/transactions', authMiddleware, async (req, res) => {
   }
 });
 
-// Create new transaction
+// Create new fee/transaction
 router.post('/transactions', authMiddleware, async (req, res) => {
   try {
-    const { studentId, studentName, amount, feeType, paymentMethod } = req.body;
-    
-    const newTransaction = {
-      _id: Date.now().toString(),
+    const {
       studentId,
       studentName,
-      amount: parseFloat(amount),
+      studentClass,
+      amount,
       feeType,
-      status: 'paid',
-      date: new Date(),
       paymentMethod,
-      invoiceNumber: `INV-${Date.now()}`
-    };
-    
-    transactions.push(newTransaction);
-    
+      dueDate,
+      term = 'Current Term',
+      discount = 0,
+      description
+    } = req.body;
+
+    // Validate student exists
+    const student = await Student.findById(studentId);
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+
+    const newFee = new Fee({
+      studentId,
+      studentName: studentName || student.name,
+      studentClass: studentClass || student.class,
+      type: feeType,
+      amount: parseFloat(amount),
+      paidAmount: paymentMethod ? parseFloat(amount) : 0, // If payment method provided, mark as paid
+      dueDate: new Date(dueDate),
+      paidDate: paymentMethod ? new Date() : null,
+      status: paymentMethod ? 'paid' : 'pending',
+      term,
+      discount: parseFloat(discount) || 0,
+      paymentMethod: paymentMethod || null,
+      description,
+      paymentHistory: paymentMethod ? [{
+        amount: parseFloat(amount),
+        date: new Date(),
+        method: paymentMethod,
+        receivedBy: req.user.name || 'Admin'
+      }] : []
+    });
+
+    await newFee.save();
+
     res.status(201).json({
       success: true,
-      data: newTransaction,
-      message: 'Transaction created successfully'
+      data: {
+        _id: newFee._id,
+        studentId: newFee.studentId,
+        studentName: newFee.studentName,
+        amount: newFee.amount,
+        paidAmount: newFee.paidAmount,
+        feeType: newFee.type,
+        status: newFee.status,
+        date: newFee.createdAt,
+        dueDate: newFee.dueDate,
+        paidDate: newFee.paidDate,
+        paymentMethod: newFee.paymentMethod,
+        invoiceNumber: newFee.invoiceNumber
+      },
+      message: 'Fee record created successfully'
     });
   } catch (error) {
+    console.error('Create transaction error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to create transaction',
@@ -192,33 +243,64 @@ router.post('/transactions', authMiddleware, async (req, res) => {
   }
 });
 
-// Update transaction status
+// Update transaction/fee status
 router.put('/transactions/:transactionId', authMiddleware, async (req, res) => {
   try {
     const { transactionId } = req.params;
-    const { status, paymentMethod } = req.body;
-    
-    const transactionIndex = transactions.findIndex(t => t._id === transactionId);
-    if (transactionIndex === -1) {
+    const { status, paymentMethod, paidAmount, remarks } = req.body;
+
+    const fee = await Fee.findById(transactionId);
+    if (!fee) {
       return res.status(404).json({
         success: false,
         message: 'Transaction not found'
       });
     }
-    
-    transactions[transactionIndex] = {
-      ...transactions[transactionIndex],
-      status,
-      paymentMethod,
-      updatedAt: new Date()
-    };
-    
+
+    const updateData = {};
+
+    if (status) updateData.status = status;
+    if (paymentMethod) updateData.paymentMethod = paymentMethod;
+    if (paidAmount !== undefined) {
+      updateData.paidAmount = parseFloat(paidAmount);
+      updateData.paidDate = new Date();
+
+      // Add to payment history
+      fee.paymentHistory.push({
+        amount: parseFloat(paidAmount),
+        date: new Date(),
+        method: paymentMethod || 'cash',
+        receivedBy: req.user.name || 'Admin'
+      });
+    }
+    if (remarks) updateData.remarks = remarks;
+
+    const updatedFee = await Fee.findByIdAndUpdate(
+      transactionId,
+      updateData,
+      { new: true }
+    );
+
     res.json({
       success: true,
-      data: transactions[transactionIndex],
+      data: {
+        _id: updatedFee._id,
+        studentId: updatedFee.studentId,
+        studentName: updatedFee.studentName,
+        amount: updatedFee.amount,
+        paidAmount: updatedFee.paidAmount,
+        feeType: updatedFee.type,
+        status: updatedFee.status,
+        date: updatedFee.createdAt,
+        dueDate: updatedFee.dueDate,
+        paidDate: updatedFee.paidDate,
+        paymentMethod: updatedFee.paymentMethod,
+        invoiceNumber: updatedFee.invoiceNumber
+      },
       message: 'Transaction updated successfully'
     });
   } catch (error) {
+    console.error('Update transaction error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update transaction',
@@ -227,47 +309,97 @@ router.put('/transactions/:transactionId', authMiddleware, async (req, res) => {
   }
 });
 
-// Get fee structure
+// Get fee structure (based on actual fee types in database)
 router.get('/fee-structure', authMiddleware, async (req, res) => {
   try {
+    // Get fee structure from actual database data
+    const feeTypes = await Fee.aggregate([
+      {
+        $group: {
+          _id: {
+            type: '$type',
+            studentClass: '$studentClass'
+          },
+          averageAmount: { $avg: '$amount' },
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $group: {
+          _id: '$_id.studentClass',
+          fees: {
+            $push: {
+              type: '$_id.type',
+              averageAmount: { $round: ['$averageAmount', 2] },
+              count: '$count'
+            }
+          }
+        }
+      },
+      {
+        $sort: { '_id': 1 }
+      }
+    ]);
+
+    // Format the data
+    const feeStructure = feeTypes.map(classData => {
+      const structure = {
+        _id: classData._id,
+        class: classData._id || 'General',
+      };
+
+      classData.fees.forEach(fee => {
+        structure[fee.type] = fee.averageAmount;
+      });
+
+      return structure;
+    });
+
+    // If no data exists, return default structure
+    if (feeStructure.length === 0) {
+      const defaultStructure = [
+        {
+          _id: '1',
+          class: 'Grade 1-5',
+          tuition: 5000,
+          library: 500,
+          lab: 300,
+          sports: 200
+        },
+        {
+          _id: '2',
+          class: 'Grade 6-8',
+          tuition: 6000,
+          library: 600,
+          lab: 400,
+          sports: 300
+        },
+        {
+          _id: '3',
+          class: 'Grade 9-10',
+          tuition: 7000,
+          library: 700,
+          lab: 500,
+          sports: 400
+        }
+      ];
+
+      return res.json({
+        success: true,
+        data: defaultStructure,
+        message: 'Default fee structure (no data in database)'
+      });
+    }
+
     res.json({
       success: true,
       data: feeStructure
     });
   } catch (error) {
+    console.error('Fetch fee structure error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch fee structure',
-      error: error.message
-    });
-  }
-});
-
-// Update fee structure
-router.put('/fee-structure/:feeId', authMiddleware, async (req, res) => {
-  try {
-    const { feeId } = req.params;
-    const updates = req.body;
-    
-    const feeIndex = feeStructure.findIndex(f => f._id === feeId);
-    if (feeIndex === -1) {
-      return res.status(404).json({
-        success: false,
-        message: 'Fee structure not found'
-      });
-    }
-    
-    feeStructure[feeIndex] = { ...feeStructure[feeIndex], ...updates };
-    
-    res.json({
-      success: true,
-      data: feeStructure[feeIndex],
-      message: 'Fee structure updated successfully'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update fee structure',
       error: error.message
     });
   }
@@ -277,22 +409,47 @@ router.put('/fee-structure/:feeId', authMiddleware, async (req, res) => {
 router.post('/invoice/:studentId', authMiddleware, async (req, res) => {
   try {
     const { studentId } = req.params;
-    
-    // In a real application, you would generate a PDF invoice here
-    // For now, we'll just return a success message
+
+    // Get student information
+    const student = await Student.findById(studentId);
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+
+    // Get all fees for the student
+    const fees = await Fee.find({ studentId })
+      .sort({ createdAt: -1 });
+
     const invoiceData = {
       invoiceNumber: `INV-${Date.now()}`,
       studentId,
+      studentName: student.name,
+      studentClass: student.class,
       generatedAt: new Date(),
+      fees: fees.map(fee => ({
+        type: fee.type,
+        amount: fee.amount,
+        paidAmount: fee.paidAmount,
+        status: fee.status,
+        dueDate: fee.dueDate,
+        invoiceNumber: fee.invoiceNumber
+      })),
+      totalAmount: fees.reduce((sum, fee) => sum + fee.amount, 0),
+      totalPaid: fees.reduce((sum, fee) => sum + fee.paidAmount, 0),
+      totalDue: fees.reduce((sum, fee) => sum + (fee.amount - fee.paidAmount), 0),
       downloadUrl: `/api/finance/invoice/${studentId}/download`
     };
-    
+
     res.json({
       success: true,
       data: invoiceData,
       message: 'Invoice generated successfully'
     });
   } catch (error) {
+    console.error('Generate invoice error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to generate invoice',
@@ -305,26 +462,132 @@ router.post('/invoice/:studentId', authMiddleware, async (req, res) => {
 router.get('/reports', authMiddleware, async (req, res) => {
   try {
     const { type = 'monthly', year = new Date().getFullYear() } = req.query;
-    
-    // Mock report data
+    const targetYear = parseInt(year);
+
+    // Get yearly totals
+    const [totalRevenue, totalPending, totalOverdue] = await Promise.all([
+      Fee.aggregate([
+        {
+          $match: {
+            status: 'paid',
+            paidDate: {
+              $gte: new Date(targetYear, 0, 1),
+              $lte: new Date(targetYear, 11, 31)
+            }
+          }
+        },
+        { $group: { _id: null, total: { $sum: '$paidAmount' } } }
+      ]),
+      Fee.aggregate([
+        {
+          $match: {
+            status: 'pending',
+            createdAt: {
+              $gte: new Date(targetYear, 0, 1),
+              $lte: new Date(targetYear, 11, 31)
+            }
+          }
+        },
+        { $group: { _id: null, total: { $sum: { $subtract: ['$amount', '$paidAmount'] } } } }
+      ]),
+      Fee.aggregate([
+        {
+          $match: {
+            status: 'overdue',
+            dueDate: { $lt: new Date() },
+            createdAt: {
+              $gte: new Date(targetYear, 0, 1),
+              $lte: new Date(targetYear, 11, 31)
+            }
+          }
+        },
+        { $group: { _id: null, total: { $sum: { $subtract: ['$amount', '$paidAmount'] } } } }
+      ])
+    ]);
+
+    // Get monthly breakdown
+    const monthlyData = await Fee.aggregate([
+      {
+        $match: {
+          createdAt: {
+            $gte: new Date(targetYear, 0, 1),
+            $lte: new Date(targetYear, 11, 31)
+          }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            month: { $month: '$createdAt' },
+            status: '$status'
+          },
+          amount: {
+            $sum: {
+              $cond: [
+                { $eq: ['$status', 'paid'] },
+                '$paidAmount',
+                { $subtract: ['$amount', '$paidAmount'] }
+              ]
+            }
+          }
+        }
+      },
+      {
+        $group: {
+          _id: '$_id.month',
+          collected: {
+            $sum: {
+              $cond: [
+                { $eq: ['$_id.status', 'paid'] },
+                '$amount',
+                0
+              ]
+            }
+          },
+          pending: {
+            $sum: {
+              $cond: [
+                { $in: ['$_id.status', ['pending', 'overdue']] },
+                '$amount',
+                0
+              ]
+            }
+          }
+        }
+      },
+      { $sort: { '_id': 1 } }
+    ]);
+
+    // Format monthly breakdown
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+
+    const monthlyBreakdown = months.map((month, index) => {
+      const data = monthlyData.find(item => item._id === index + 1);
+      return {
+        month,
+        collected: data ? Math.round(data.collected) : 0,
+        pending: data ? Math.round(data.pending) : 0
+      };
+    });
+
     const reportData = {
       type,
-      year: parseInt(year),
-      totalRevenue: transactions.filter(t => t.status === 'paid').reduce((sum, t) => sum + t.amount, 0),
-      totalPending: transactions.filter(t => t.status === 'pending').reduce((sum, t) => sum + t.amount, 0),
-      totalOverdue: transactions.filter(t => t.status === 'overdue').reduce((sum, t) => sum + t.amount, 0),
-      monthlyBreakdown: [
-        { month: 'January', collected: 45000, pending: 12000 },
-        { month: 'February', collected: 38000, pending: 8000 },
-        { month: 'March', collected: 52000, pending: 15000 }
-      ]
+      year: targetYear,
+      totalRevenue: totalRevenue[0]?.total || 0,
+      totalPending: totalPending[0]?.total || 0,
+      totalOverdue: totalOverdue[0]?.total || 0,
+      monthlyBreakdown
     };
-    
+
     res.json({
       success: true,
       data: reportData
     });
   } catch (error) {
+    console.error('Financial reports error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to generate financial report',
@@ -337,22 +600,31 @@ router.get('/reports', authMiddleware, async (req, res) => {
 router.delete('/transactions/:transactionId', authMiddleware, async (req, res) => {
   try {
     const { transactionId } = req.params;
-    
-    const transactionIndex = transactions.findIndex(t => t._id === transactionId);
-    if (transactionIndex === -1) {
+
+    const deletedFee = await Fee.findByIdAndDelete(transactionId);
+
+    if (!deletedFee) {
       return res.status(404).json({
         success: false,
         message: 'Transaction not found'
       });
     }
-    
-    transactions.splice(transactionIndex, 1);
-    
+
     res.json({
       success: true,
-      message: 'Transaction deleted successfully'
+      message: 'Transaction deleted successfully',
+      data: {
+        deletedTransaction: {
+          _id: deletedFee._id,
+          studentName: deletedFee.studentName,
+          amount: deletedFee.amount,
+          type: deletedFee.type,
+          invoiceNumber: deletedFee.invoiceNumber
+        }
+      }
     });
   } catch (error) {
+    console.error('Delete transaction error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete transaction',
