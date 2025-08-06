@@ -389,42 +389,94 @@ router.get('/schedule/teacher/me', authorize('teacher'), async (req, res) => {
 });
 
 // @route   GET /api/classes/schedule
-// @desc    Get general schedule (for admin timetable management)
-// @access  Private (Admin)
-router.get('/schedule', authorize('admin'), async (req, res) => {
+// @desc    Get general schedule (accessible to all authenticated users)
+// @access  Private
+router.get('/schedule', async (req, res) => {
   try {
     const weekly = req.query.weekly === 'true';
     
     if (weekly) {
       // Return a comprehensive weekly schedule for all classes
-      const classes = await Class.find({ status: 'active' }).populate('teacherId', 'name');
+      const classes = await Class.find({ status: 'active' }).populate('teacherId', 'name').lean();
       const weeklySchedule = [];
       const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
       
+      if (classes.length === 0) {
+        // Return empty schedule if no classes found
+        return res.json({ 
+          success: true, 
+          data: { 
+            weeklySchedule: [],
+            message: 'No active classes found'
+          } 
+        });
+      }
+      
       days.forEach((day, dayIndex) => {
         classes.forEach((cls, classIndex) => {
-          cls.subjects.forEach((subject, subjectIndex) => {
-            const hour = 9 + (subjectIndex * 2) + (dayIndex % 2);
-            weeklySchedule.push({
-              _id: `${cls._id}_${day}_${subject}`,
-              day,
-              time: `${hour.toString().padStart(2, '0')}:00 - ${(hour + 1).toString().padStart(2, '0')}:00`,
-              className: cls.name,
-              subject,
-              teacher: cls.teacherId?.name || 'TBA',
-              room: cls.room || `Room ${101 + subjectIndex}`,
-              details: `${cls.name} - ${subject}`
+          if (cls.subjects && cls.subjects.length > 0) {
+            cls.subjects.forEach((subject, subjectIndex) => {
+              const hour = 9 + (subjectIndex % 6); // Limit to 6 periods per day
+              weeklySchedule.push({
+                _id: `${cls._id}_${day}_${subject}_${subjectIndex}`,
+                day,
+                time: `${hour.toString().padStart(2, '0')}:00 - ${(hour + 1).toString().padStart(2, '0')}:00`,
+                className: `${cls.name} - ${cls.section}`,
+                subject,
+                teacher: cls.teacherId?.name || 'TBA',
+                room: cls.room || `Room ${101 + (classIndex % 10)}`,
+                details: `${cls.name} ${cls.section} - ${subject}`,
+                grade: cls.grade
+              });
             });
-          });
+          }
         });
       });
       
-      res.json({ success: true, data: { weeklySchedule } });
+      res.json({ 
+        success: true, 
+        data: { 
+          weeklySchedule: weeklySchedule.slice(0, 50), // Limit to 50 entries to avoid overwhelming
+          totalClasses: classes.length
+        } 
+      });
     } else {
-      res.json({ success: true, data: { schedule: [] } });
+      // Return today's schedule
+      const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+      const classes = await Class.find({ status: 'active' }).populate('teacherId', 'name').lean();
+      const todaySchedule = [];
+      
+      classes.forEach((cls, classIndex) => {
+        if (cls.subjects && cls.subjects.length > 0) {
+          cls.subjects.forEach((subject, subjectIndex) => {
+            const hour = 9 + (subjectIndex % 6);
+            todaySchedule.push({
+              _id: `${cls._id}_${today}_${subject}`,
+              subject,
+              className: `${cls.name} - ${cls.section}`,
+              teacher: cls.teacherId?.name || 'TBA',
+              room: cls.room || `Room ${101 + (classIndex % 10)}`,
+              time: `${hour.toString().padStart(2, '0')}:00 - ${(hour + 1).toString().padStart(2, '0')}:00`,
+              status: 'scheduled'
+            });
+          });
+        }
+      });
+      
+      res.json({ 
+        success: true, 
+        data: { 
+          schedule: todaySchedule.slice(0, 20) // Limit today's schedule
+        } 
+      });
     }
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to fetch schedule', error: error.message });
+    console.error('Schedule fetch error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch schedule', 
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 });
 
@@ -438,6 +490,79 @@ router.post('/schedule', authorize('admin'), async (req, res) => {
     res.json({ success: true, message: 'Timetable entry added successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to add timetable entry', error: error.message });
+  }
+});
+
+// @route   POST /api/classes/seed-sample
+// @desc    Create sample classes for testing (development only)
+// @access  Private (Admin)
+router.post('/seed-sample', authorize('admin'), async (req, res) => {
+  try {
+    // Check if classes already exist
+    const existingClasses = await Class.countDocuments();
+    if (existingClasses > 0) {
+      return res.json({ 
+        success: true, 
+        message: `${existingClasses} classes already exist. No sample data created.` 
+      });
+    }
+
+    const sampleClasses = [
+      {
+        name: 'Mathematics',
+        section: 'A',
+        grade: '10',
+        subjects: ['Algebra', 'Geometry', 'Statistics'],
+        room: 'Room 101',
+        capacity: 30,
+        academicYear: '2024-25',
+        status: 'active'
+      },
+      {
+        name: 'Science',
+        section: 'B',
+        grade: '10',
+        subjects: ['Physics', 'Chemistry', 'Biology'],
+        room: 'Room 102',
+        capacity: 25,
+        academicYear: '2024-25',
+        status: 'active'
+      },
+      {
+        name: 'English',
+        section: 'A',
+        grade: '9',
+        subjects: ['Literature', 'Grammar', 'Writing'],
+        room: 'Room 103',
+        capacity: 28,
+        academicYear: '2024-25',
+        status: 'active'
+      },
+      {
+        name: 'History',
+        section: 'C',
+        grade: '11',
+        subjects: ['World History', 'Geography', 'Civics'],
+        room: 'Room 104',
+        capacity: 32,
+        academicYear: '2024-25',
+        status: 'active'
+      }
+    ];
+
+    const createdClasses = await Class.insertMany(sampleClasses);
+    
+    res.json({ 
+      success: true, 
+      message: `${createdClasses.length} sample classes created successfully`,
+      data: { classes: createdClasses }
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to create sample classes', 
+      error: error.message 
+    });
   }
 });
 
