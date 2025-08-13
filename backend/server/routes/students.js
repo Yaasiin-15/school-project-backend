@@ -282,11 +282,20 @@ router.get('/:id/grades', async (req, res) => {
 // @route   GET /api/students/:id/fees
 // @desc    Get student's fees
 // @access  Private
-router.get('/:id/fees', async (req, res) => {
+router.get('/:id/fees', authorize('admin', 'accountant', 'student', 'parent'), async (req, res) => {
   try {
     const { status, term } = req.query;
+    const studentId = req.params.id;
 
-    const query = { studentId: req.params.id };
+    // Check if user has permission to view this student's fees
+    if (req.user.role === 'student' && req.user._id.toString() !== studentId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only view your own fees'
+      });
+    }
+
+    const query = { studentId };
     if (status && status !== 'all') query.status = status;
     if (term && term !== 'all') query.term = term;
 

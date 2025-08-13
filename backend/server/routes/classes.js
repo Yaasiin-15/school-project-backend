@@ -493,6 +493,199 @@ router.post('/schedule', authorize('admin'), async (req, res) => {
   }
 });
 
+// @route   GET /api/classes/:id/timetable
+// @desc    Get class timetable
+// @access  Private
+router.get('/:id/timetable', authorize('admin', 'teacher', 'student'), async (req, res) => {
+  try {
+    const classData = await Class.findById(req.params.id);
+    
+    if (!classData) {
+      return res.status(404).json({
+        success: false,
+        message: 'Class not found'
+      });
+    }
+
+    // Convert schedule array to timetable object for easier frontend handling
+    const timetable = {};
+    
+    if (classData.schedule && classData.schedule.length > 0) {
+      classData.schedule.forEach(daySchedule => {
+        timetable[daySchedule.day] = {};
+        daySchedule.periods.forEach(period => {
+          timetable[daySchedule.day][period.period || period.startTime] = {
+            subject: period.subject,
+            teacherId: period.teacherId,
+            room: period.room,
+            startTime: period.startTime,
+            endTime: period.endTime,
+            notes: period.notes
+          };
+        });
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { timetable }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch timetable',
+      error: error.message
+    });
+  }
+});
+
+// @route   PUT /api/classes/:id/timetable
+// @desc    Update class timetable period
+// @access  Private (Admin, Teacher)
+router.put('/:id/timetable', authorize('admin', 'teacher'), async (req, res) => {
+  try {
+    const { day, period, subject, teacherId, room, startTime, endTime, notes } = req.body;
+    
+    const classData = await Class.findById(req.params.id);
+    
+    if (!classData) {
+      return res.status(404).json({
+        success: false,
+        message: 'Class not found'
+      });
+    }
+
+    // Initialize schedule if it doesn't exist
+    if (!classData.schedule) {
+      classData.schedule = [];
+    }
+
+    // Find or create day schedule
+    let daySchedule = classData.schedule.find(s => s.day === day);
+    if (!daySchedule) {
+      daySchedule = { day, periods: [] };
+      classData.schedule.push(daySchedule);
+    }
+
+    // Find or create period
+    let periodIndex = daySchedule.periods.findIndex(p => 
+      p.period === period || p.startTime === startTime
+    );
+    
+    const periodData = {
+      subject,
+      teacherId,
+      room,
+      startTime,
+      endTime,
+      period,
+      notes
+    };
+
+    if (periodIndex >= 0) {
+      // Update existing period
+      daySchedule.periods[periodIndex] = periodData;
+    } else {
+      // Add new period
+      daySchedule.periods.push(periodData);
+    }
+
+    await classData.save();
+
+    res.json({
+      success: true,
+      message: 'Timetable updated successfully',
+      data: { period: periodData }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update timetable',
+      error: error.message
+    });
+  }
+});
+
+// @route   DELETE /api/classes/:id/timetable/:day/:period
+// @desc    Delete timetable period
+// @access  Private (Admin, Teacher)
+router.delete('/:id/timetable/:day/:period', authorize('admin', 'teacher'), async (req, res) => {
+  try {
+    const { id, day, period } = req.params;
+    
+    const classData = await Class.findById(id);
+    
+    if (!classData) {
+      return res.status(404).json({
+        success: false,
+        message: 'Class not found'
+      });
+    }
+
+    // Find day schedule
+    const daySchedule = classData.schedule?.find(s => s.day === day);
+    if (!daySchedule) {
+      return res.status(404).json({
+        success: false,
+        message: 'Day schedule not found'
+      });
+    }
+
+    // Remove period
+    daySchedule.periods = daySchedule.periods.filter(p => 
+      p.period !== period && p.period !== parseInt(period)
+    );
+
+    await classData.save();
+
+    res.json({
+      success: true,
+      message: 'Period deleted successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete period',
+      error: error.message
+    });
+  }
+});
+
+// @route   GET /api/classes/timetable/conflicts
+// @desc    Check for timetable conflicts
+// @access  Private (Admin, Teacher)
+router.get('/timetable/conflicts', authorize('admin', 'teacher'), async (req, res) => {
+  try {
+    const { teacherId, day, startTime, endTime, excludeClassId } = req.query;
+    
+    const query = {
+      'schedule.day': day,
+      'schedule.periods.teacherId': teacherId,
+      'schedule.periods.startTime': { $lt: endTime },
+      'schedule.periods.endTime': { $gt: startTime }
+    };
+    
+    if (excludeClassId) {
+      query._id = { $ne: excludeClassId };
+    }
+
+    const conflicts = await Class.find(query)
+      .populate('schedule.periods.teacherId', 'name')
+      .select('name section grade schedule');
+
+    res.json({
+      success: true,
+      data: { conflicts }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check conflicts',
+      error: error.message
+    });
+  }
+});
+
 // @route   POST /api/classes/seed-sample
 // @desc    Create sample classes for testing (development only)
 // @access  Private (Admin)

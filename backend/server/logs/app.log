@@ -1,0 +1,10 @@
+{"timestamp":"2025-08-13T17:19:47.894Z","level":"INFO","message":"Database connected successfully","host":"ac-lfbnawa-shard-00-02.fvacpn1.mongodb.net","port":27017,"name":"school_management"}
+{"timestamp":"2025-08-13T17:19:47.929Z","level":"INFO","message":"Server started successfully","port":"3001","environment":"production"}
+{"timestamp":"2025-08-13T18:00:24.158Z","level":"INFO","message":"Database connected successfully","host":"ac-lfbnawa-shard-00-00.fvacpn1.mongodb.net","port":27017,"name":"school_management"}
+{"timestamp":"2025-08-13T18:00:24.170Z","level":"INFO","message":"Server started successfully","port":"3001","environment":"production"}
+{"timestamp":"2025-08-13T18:01:04.765Z","level":"WARN","message":"Database disconnected"}
+{"timestamp":"2025-08-13T18:01:26.567Z","level":"INFO","message":"Database reconnected"}
+{"timestamp":"2025-08-13T18:02:19.517Z","level":"WARN","message":"Database disconnected"}
+{"timestamp":"2025-08-13T18:06:41.979Z","level":"INFO","message":"Database reconnected"}
+{"timestamp":"2025-08-13T18:08:14.904Z","level":"WARN","message":"Database disconnected"}
+{"timestamp":"2025-08-13T18:09:36.171Z","level":"INFO","message":"Database reconnected"}

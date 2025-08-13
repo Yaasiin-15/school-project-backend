@@ -8,7 +8,7 @@ const router = express.Router();
 // @route   GET /api/fees
 // @desc    Get all fees with filtering
 // @access  Private
-router.get('/', async (req, res) => {
+router.get('/', authorize('admin', 'accountant', 'teacher'), async (req, res) => {
   try {
     const {
       page = 1,
@@ -79,7 +79,7 @@ router.get('/', async (req, res) => {
 // @route   GET /api/fees/:id
 // @desc    Get fee by ID
 // @access  Private
-router.get('/:id', async (req, res) => {
+router.get('/:id', authorize('admin', 'accountant', 'teacher', 'student', 'parent'), async (req, res) => {
   try {
     const fee = await Fee.findById(req.params.id)
       .populate('studentId', 'name studentId email avatar class section');
@@ -219,8 +219,8 @@ router.delete('/:id', authorize('admin', 'accountant'), async (req, res) => {
 
 // @route   POST /api/fees/:id/payment
 // @desc    Process fee payment
-// @access  Private (Admin, Accountant)
-router.post('/:id/payment', authorize('admin', 'accountant'), async (req, res) => {
+// @access  Private (Admin, Accountant, Parent)
+router.post('/:id/payment', authorize('admin', 'accountant', 'parent'), async (req, res) => {
   try {
     const { amount, paymentMethod, transactionId } = req.body;
     
