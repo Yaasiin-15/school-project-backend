@@ -1,5 +1,6 @@
 import express from 'express';
 import authMiddleware from '../middleware/auth.js';
+import Exam from '../models/Exam.js';
 import Grade from '../models/Grade.js';
 import Student from '../models/Student.js';
 import Class from '../models/Class.js';
