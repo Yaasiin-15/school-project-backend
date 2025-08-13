@@ -22,19 +22,19 @@ router.get('/', authorize('admin', 'teacher'), async (req, res) => {
     } = req.query;
 
     const query = {};
-    
+
     if (status !== 'all') {
       query.status = status;
     }
-    
+
     if (className && className !== 'all') {
       query.class = className;
     }
-    
+
     if (section && section !== 'all') {
       query.section = section;
     }
-    
+
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -78,7 +78,7 @@ router.get('/', authorize('admin', 'teacher'), async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const student = await Student.findById(req.params.id).populate('userId', 'lastLogin isActive');
-    
+
     if (!student) {
       return res.status(404).json({
         success: false,
@@ -226,7 +226,7 @@ router.put('/:id', authorize('admin'), async (req, res) => {
 router.delete('/:id', authorize('admin'), async (req, res) => {
   try {
     const student = await Student.findById(req.params.id);
-    
+
     if (!student) {
       return res.status(404).json({
         success: false,
@@ -236,7 +236,7 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
 
     // Delete associated user account
     await User.findByIdAndDelete(student.userId);
-    
+
     // Delete student record
     await Student.findByIdAndDelete(req.params.id);
 
@@ -259,7 +259,7 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
 router.get('/:id/grades', async (req, res) => {
   try {
     const { term, subject } = req.query;
-    
+
     const query = { studentId: req.params.id };
     if (term) query.term = term;
     if (subject) query.subjectName = subject;
@@ -285,7 +285,7 @@ router.get('/:id/grades', async (req, res) => {
 router.get('/:id/fees', async (req, res) => {
   try {
     const { status, term } = req.query;
-    
+
     const query = { studentId: req.params.id };
     if (status && status !== 'all') query.status = status;
     if (term && term !== 'all') query.term = term;
@@ -381,15 +381,15 @@ router.get('/schedule/student/me', authorize('student'), async (req, res) => {
 
     // Find the student's class
     const Class = (await import('../models/Class.js')).default;
-    const studentClass = await Class.findOne({ 
-      students: student._id 
+    const studentClass = await Class.findOne({
+      students: student._id
     }).populate('teacherId', 'name');
 
     // Generate a basic weekly schedule based on class subjects
     const weeklySchedule = [];
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
     const subjects = studentClass?.subjects || [];
-    
+
     days.forEach((day, dayIndex) => {
       subjects.slice(0, 3).forEach((subject, subjectIndex) => {
         const hour = 9 + (subjectIndex * 2);

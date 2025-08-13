@@ -117,6 +117,9 @@ router.get('/:id', async (req, res) => {
 // @access  Private (Admin, Teacher)
 router.post('/', authorize('admin', 'teacher'), async (req, res) => {
   try {
+    console.log('POST /api/grades - Request body:', req.body);
+    console.log('POST /api/grades - User:', req.user?.role, req.user?.id);
+    
     const {
       studentId,
       classId,
@@ -132,12 +135,52 @@ router.post('/', authorize('admin', 'teacher'), async (req, res) => {
       remarks
     } = req.body;
 
+    // Validate required fields
+    if (!studentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Student ID is required'
+      });
+    }
+
+    if (!subjectName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Subject name is required'
+      });
+    }
+
+    if (!examType) {
+      return res.status(400).json({
+        success: false,
+        message: 'Exam type is required'
+      });
+    }
+
+    if (score === undefined || score === null) {
+      return res.status(400).json({
+        success: false,
+        message: 'Score is required'
+      });
+    }
+
+    if (!maxScore) {
+      return res.status(400).json({
+        success: false,
+        message: 'Max score is required'
+      });
+    }
+
+    console.log('Looking for student with ID:', studentId);
+    
     // Get student information
     const student = await Student.findById(studentId);
+    console.log('Found student:', student ? student.name : 'Not found');
+    
     if (!student) {
       return res.status(404).json({
         success: false,
-        message: 'Student not found'
+        message: `Student not found with ID: ${studentId}`
       });
     }
 
@@ -150,25 +193,30 @@ router.post('/', authorize('admin', 'teacher'), async (req, res) => {
       }
     }
 
-    const grade = new Grade({
+    const gradeData = {
       studentId,
       studentName: student.name,
-      classId,
+      classId: classId || student.classId,
       className: student.class,
       subjectName,
       examType,
-      score,
-      maxScore,
-      teacherId,
+      score: Number(score),
+      maxScore: Number(maxScore),
+      teacherId: teacherId || null,
       teacherName,
-      date,
-      term,
-      academicYear,
-      weightage,
-      remarks
-    });
+      date: date || new Date(),
+      term: term || 'First Term',
+      academicYear: academicYear || '2024-25',
+      weightage: Number(weightage) || 10,
+      remarks: remarks || ''
+    };
 
+    console.log('Creating grade with data:', gradeData);
+
+    const grade = new Grade(gradeData);
     await grade.save();
+
+    console.log('Grade created successfully:', grade._id);
 
     res.status(201).json({
       success: true,
@@ -176,10 +224,12 @@ router.post('/', authorize('admin', 'teacher'), async (req, res) => {
       data: { grade }
     });
   } catch (error) {
+    console.error('Error creating grade:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to create grade',
-      error: error.message
+      error: error.message,
+      details: error.stack
     });
   }
 });
