@@ -344,8 +344,12 @@ router.get('/schedule/teacher/me', authorize('teacher'), async (req, res) => {
       
       days.forEach((day, dayIndex) => {
         classes.forEach((cls, classIndex) => {
-          teacher.subjects.forEach((subject, subjectIndex) => {
-            if (cls.subjects.includes(subject)) {
+          // Check if teacher has subjects and class has subjects
+          const teacherSubjects = teacher.subjects || [];
+          const classSubjects = cls.subjects || [];
+          
+          teacherSubjects.forEach((subject, subjectIndex) => {
+            if (classSubjects.includes(subject)) {
               const hour = 9 + (subjectIndex * 2) + (classIndex % 2);
               weeklySchedule.push({
                 day,
@@ -366,8 +370,12 @@ router.get('/schedule/teacher/me', authorize('teacher'), async (req, res) => {
       const schedule = [];
       
       classes.forEach((cls, classIndex) => {
-        teacher.subjects.forEach((subject, subjectIndex) => {
-          if (cls.subjects.includes(subject)) {
+        // Check if teacher has subjects and class has subjects
+        const teacherSubjects = teacher.subjects || [];
+        const classSubjects = cls.subjects || [];
+        
+        teacherSubjects.forEach((subject, subjectIndex) => {
+          if (classSubjects.includes(subject)) {
             const hour = 9 + (subjectIndex * 2);
             schedule.push({
               id: cls._id,
@@ -391,13 +399,13 @@ router.get('/schedule/teacher/me', authorize('teacher'), async (req, res) => {
 // @route   GET /api/classes/schedule
 // @desc    Get general schedule (accessible to all authenticated users)
 // @access  Private
-router.get('/schedule', async (req, res) => {
+router.get('/schedule', authorize('admin', 'teacher', 'student'), async (req, res) => {
   try {
     const weekly = req.query.weekly === 'true';
     
     if (weekly) {
       // Return a comprehensive weekly schedule for all classes
-      const classes = await Class.find({ status: 'active' }).populate('teacherId', 'name').lean();
+      const classes = await Class.find({ status: 'active' }).lean();
       const weeklySchedule = [];
       const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
       
@@ -414,7 +422,26 @@ router.get('/schedule', async (req, res) => {
       
       days.forEach((day, dayIndex) => {
         classes.forEach((cls, classIndex) => {
-          if (cls.subjects && cls.subjects.length > 0) {
+          // Use the new schedule structure if available
+          if (cls.schedule && cls.schedule.length > 0) {
+            const daySchedule = cls.schedule.find(s => s.day === day);
+            if (daySchedule && daySchedule.periods) {
+              daySchedule.periods.forEach((period, periodIndex) => {
+                weeklySchedule.push({
+                  _id: `${cls._id}_${day}_${period.subject}_${periodIndex}`,
+                  day,
+                  time: `${period.startTime} - ${period.endTime}`,
+                  className: `${cls.name} - ${cls.section}`,
+                  subject: period.subject,
+                  teacher: cls.teacherName || 'TBA',
+                  room: period.room || cls.room || `Room ${101 + (classIndex % 10)}`,
+                  details: `${cls.name} ${cls.section} - ${period.subject}`,
+                  grade: cls.grade
+                });
+              });
+            }
+          } else if (cls.subjects && cls.subjects.length > 0) {
+            // Fallback to old structure
             cls.subjects.forEach((subject, subjectIndex) => {
               const hour = 9 + (subjectIndex % 6); // Limit to 6 periods per day
               weeklySchedule.push({
@@ -423,7 +450,7 @@ router.get('/schedule', async (req, res) => {
                 time: `${hour.toString().padStart(2, '0')}:00 - ${(hour + 1).toString().padStart(2, '0')}:00`,
                 className: `${cls.name} - ${cls.section}`,
                 subject,
-                teacher: cls.teacherId?.name || 'TBA',
+                teacher: cls.teacherName || 'TBA',
                 room: cls.room || `Room ${101 + (classIndex % 10)}`,
                 details: `${cls.name} ${cls.section} - ${subject}`,
                 grade: cls.grade
@@ -443,18 +470,35 @@ router.get('/schedule', async (req, res) => {
     } else {
       // Return today's schedule
       const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-      const classes = await Class.find({ status: 'active' }).populate('teacherId', 'name').lean();
+      const classes = await Class.find({ status: 'active' }).lean();
       const todaySchedule = [];
       
       classes.forEach((cls, classIndex) => {
-        if (cls.subjects && cls.subjects.length > 0) {
+        // Use the new schedule structure if available
+        if (cls.schedule && cls.schedule.length > 0) {
+          const daySchedule = cls.schedule.find(s => s.day === today);
+          if (daySchedule && daySchedule.periods) {
+            daySchedule.periods.forEach((period, periodIndex) => {
+              todaySchedule.push({
+                _id: `${cls._id}_${today}_${period.subject}`,
+                subject: period.subject,
+                className: `${cls.name} - ${cls.section}`,
+                teacher: cls.teacherName || 'TBA',
+                room: period.room || cls.room || `Room ${101 + (classIndex % 10)}`,
+                time: `${period.startTime} - ${period.endTime}`,
+                status: 'scheduled'
+              });
+            });
+          }
+        } else if (cls.subjects && cls.subjects.length > 0) {
+          // Fallback to old structure
           cls.subjects.forEach((subject, subjectIndex) => {
             const hour = 9 + (subjectIndex % 6);
             todaySchedule.push({
               _id: `${cls._id}_${today}_${subject}`,
               subject,
               className: `${cls.name} - ${cls.section}`,
-              teacher: cls.teacherId?.name || 'TBA',
+              teacher: cls.teacherName || 'TBA',
               room: cls.room || `Room ${101 + (classIndex % 10)}`,
               time: `${hour.toString().padStart(2, '0')}:00 - ${(hour + 1).toString().padStart(2, '0')}:00`,
               status: 'scheduled'
