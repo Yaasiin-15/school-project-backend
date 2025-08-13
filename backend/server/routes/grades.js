@@ -210,10 +210,7 @@ router.post('/', authorize('admin', 'teacher'), async (req, res) => {
       remarks: remarks || ''
     };
 
-    // Only add classId if it's provided and valid
-    if (classId && classId.match(/^[0-9a-fA-F]{24}$/)) {
-      gradeData.classId = classId;
-    }
+    // Don't include classId for now to avoid validation issues
 
     console.log('Creating grade with data:', gradeData);
 

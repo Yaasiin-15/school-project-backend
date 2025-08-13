@@ -79,7 +79,6 @@ const gradeSchema = new mongoose.Schema({
 
 // Indexes for better performance
 gradeSchema.index({ studentId: 1, subjectName: 1, term: 1 });
-gradeSchema.index({ classId: 1, subjectName: 1 });
 gradeSchema.index({ teacherId: 1 });
 gradeSchema.index({ date: -1 });
 
