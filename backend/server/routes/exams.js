@@ -8,6 +8,58 @@ import Teacher from '../models/Teacher.js';
 
 const router = express.Router();
 
+// Get all classes in the school
+router.get('/classes', authMiddleware, async (req, res) => {
+  try {
+    const classes = await Student.aggregate([
+      { $match: { status: 'active' } },
+      {
+        $group: {
+          _id: {
+            class: '$class',
+            section: '$section'
+          },
+          className: { $first: { $concat: ['$class', '-', '$section'] } },
+          studentCount: { $sum: 1 },
+          students: {
+            $push: {
+              _id: '$_id',
+              name: '$name',
+              studentId: '$studentId',
+              rollNumber: '$rollNumber'
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          className: '$className',
+          class: '$_id.class',
+          section: '$_id.section',
+          studentCount: 1,
+          students: 1
+        }
+      },
+      { $sort: { class: 1, section: 1 } }
+    ]);
+
+    res.json({
+      success: true,
+      data: classes,
+      totalClasses: classes.length,
+      totalStudents: classes.reduce((sum, cls) => sum + cls.studentCount, 0)
+    });
+  } catch (error) {
+    console.error('Fetch classes error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch classes',
+      error: error.message
+    });
+  }
+});
+
 // Get all exams (grades grouped by exam type and subject)
 router.get('/', authMiddleware, async (req, res) => {
   try {
@@ -92,67 +144,120 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-// Create new exam (creates grade entries for all students in the class)
+// Create new exam (creates grade entries for all students in all classes)
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { title, subject, class: className, date, duration, maxMarks, instructions, examType = 'exam' } = req.body;
+    const { title, subject, date, duration, maxMarks, instructions, examType = 'exam', applyToAllClasses = true } = req.body;
     
-    // Find all students in the specified class
-    const students = await Student.find({ 
-      class: className, 
-      status: 'active' 
-    }).select('_id name studentId');
+    let students = [];
+    let totalGradesCreated = 0;
+    let classesAffected = [];
 
-    if (students.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'No active students found in the specified class'
-      });
+    if (applyToAllClasses) {
+      // Find all active students across all classes
+      students = await Student.find({ 
+        status: 'active' 
+      }).select('_id name studentId class section');
+
+      if (students.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'No active students found in the school'
+        });
+      }
+
+      // Group students by class for grade entries
+      const studentsByClass = students.reduce((acc, student) => {
+        const classKey = `${student.class}-${student.section}`;
+        if (!acc[classKey]) {
+          acc[classKey] = [];
+          classesAffected.push(classKey);
+        }
+        acc[classKey].push(student);
+        return acc;
+      }, {});
+
+      // Create grade entries for all students in all classes
+      const allGradeEntries = [];
+      
+      for (const [className, classStudents] of Object.entries(studentsByClass)) {
+        const gradeEntries = classStudents.map(student => ({
+          studentId: student._id,
+          studentName: student.name,
+          className: className,
+          subjectName: subject,
+          examType: examType,
+          score: 0,
+          maxScore: parseInt(maxMarks),
+          teacherId: req.user._id,
+          date: new Date(date),
+          term: 'Current Term',
+          academicYear: '2024-25',
+          remarks: 'School-wide exam created - scores pending'
+        }));
+        allGradeEntries.push(...gradeEntries);
+      }
+
+      const createdGrades = await Grade.insertMany(allGradeEntries);
+      totalGradesCreated = createdGrades.length;
+
+    } else {
+      // Legacy single class creation (if needed)
+      const { class: className } = req.body;
+      students = await Student.find({ 
+        class: className, 
+        status: 'active' 
+      }).select('_id name studentId class section');
+
+      if (students.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'No active students found in the specified class'
+        });
+      }
+
+      const gradeEntries = students.map(student => ({
+        studentId: student._id,
+        studentName: student.name,
+        className: `${student.class}-${student.section}`,
+        subjectName: subject,
+        examType: examType,
+        score: 0,
+        maxScore: parseInt(maxMarks),
+        teacherId: req.user._id,
+        date: new Date(date),
+        term: 'Current Term',
+        academicYear: '2024-25',
+        remarks: 'Exam created - scores pending'
+      }));
+
+      const createdGrades = await Grade.insertMany(gradeEntries);
+      totalGradesCreated = createdGrades.length;
+      classesAffected = [`${className}`];
     }
-
-    // Create grade entries for all students (initially with 0 score)
-    const gradeEntries = students.map(student => ({
-      studentId: student._id,
-      studentName: student.name,
-      className: className,
-      subjectName: subject,
-      examType: examType,
-      score: 0,
-      maxScore: parseInt(maxMarks),
-      teacherId: req.user._id,
-      date: new Date(date),
-      term: 'Current Term',
-      academicYear: '2024-25',
-      remarks: 'Exam created - scores pending'
-    }));
-
-    const createdGrades = await Grade.insertMany(gradeEntries);
     
     const examData = {
-      _id: `${subject}_${className}_${examType}_${Date.now()}`,
+      _id: `${subject}_${examType}_${Date.now()}`,
       title,
       subject,
-      class: className,
       date: new Date(date),
       duration: parseInt(duration),
       maxMarks: parseInt(maxMarks),
       instructions,
       examType,
       createdBy: req.user._id,
-      students: students.map(student => ({
-        _id: student._id,
-        name: student.name,
-        studentId: student.studentId,
-        marks: 0
-      })),
+      applyToAllClasses,
+      classesAffected,
       totalStudents: students.length,
-      gradesCreated: createdGrades.length
+      gradesCreated: totalGradesCreated
     };
     
     res.status(201).json({
       success: true,
       data: examData,
-      message: `Exam created successfully with ${createdGrades.length} student entries`
+      message: applyToAllClasses 
+        ? `School-wide exam created successfully for ${classesAffected.length} classes with ${totalGradesCreated} student entries`
+        : `Exam created successfully with ${totalGradesCreated} student entries`
     });
   } catch (error) {
     console.error('Create exam error:', error);
