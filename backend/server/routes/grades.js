@@ -23,27 +23,27 @@ router.get('/', async (req, res) => {
     } = req.query;
 
     const query = {};
-    
+
     if (studentId && studentId !== 'all') {
       query.studentId = studentId;
     }
-    
+
     if (subjectName && subjectName !== 'all') {
       query.subjectName = subjectName;
     }
-    
+
     if (examType && examType !== 'all') {
       query.examType = examType;
     }
-    
+
     if (term && term !== 'all') {
       query.term = term;
     }
-    
+
     if (teacherId && teacherId !== 'all') {
       query.teacherId = teacherId;
     }
-    
+
     if (search) {
       query.$or = [
         { studentName: { $regex: search, $options: 'i' } },
@@ -91,7 +91,7 @@ router.get('/:id', async (req, res) => {
     const grade = await Grade.findById(req.params.id)
       .populate('studentId', 'name studentId email avatar class section')
       .populate('teacherId', 'name teacherId email');
-    
+
     if (!grade) {
       return res.status(404).json({
         success: false,
@@ -119,7 +119,7 @@ router.post('/', authorize('admin', 'teacher'), async (req, res) => {
   try {
     console.log('POST /api/grades - Request body:', req.body);
     console.log('POST /api/grades - User:', req.user?.role, req.user?.id);
-    
+
     const {
       studentId,
       classId,
@@ -172,11 +172,11 @@ router.post('/', authorize('admin', 'teacher'), async (req, res) => {
     }
 
     console.log('Looking for student with ID:', studentId);
-    
+
     // Get student information
     const student = await Student.findById(studentId);
     console.log('Found student:', student ? student.name : 'Not found');
-    
+
     if (!student) {
       return res.status(404).json({
         success: false,
@@ -196,7 +196,6 @@ router.post('/', authorize('admin', 'teacher'), async (req, res) => {
     const gradeData = {
       studentId,
       studentName: student.name,
-      classId: classId || student.classId,
       className: student.class,
       subjectName,
       examType,
@@ -210,6 +209,11 @@ router.post('/', authorize('admin', 'teacher'), async (req, res) => {
       weightage: Number(weightage) || 10,
       remarks: remarks || ''
     };
+
+    // Only add classId if it's provided and valid
+    if (classId && classId.match(/^[0-9a-fA-F]{24}$/)) {
+      gradeData.classId = classId;
+    }
 
     console.log('Creating grade with data:', gradeData);
 
@@ -272,7 +276,7 @@ router.put('/:id', authorize('admin', 'teacher'), async (req, res) => {
 router.delete('/:id', authorize('admin', 'teacher'), async (req, res) => {
   try {
     const grade = await Grade.findByIdAndDelete(req.params.id);
-    
+
     if (!grade) {
       return res.status(404).json({
         success: false,

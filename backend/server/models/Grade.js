@@ -11,8 +11,8 @@ const gradeSchema = new mongoose.Schema({
     required: true
   },
   classId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Class'
+    type: String,
+    required: false
   },
   className: {
     type: String,
