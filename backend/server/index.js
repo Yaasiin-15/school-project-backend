@@ -35,6 +35,7 @@ import resourceRoutes from './routes/resources.js';
 import analyticsRoutes from './routes/analytics.js';
 import promotionRoutes from './routes/promotions.js';
 import feeReminderRoutes from './routes/feeReminders.js';
+import timetableRoutes from './routes/timetable.js';
 
 // Import middleware
 import authMiddleware from './middleware/auth.js';
@@ -83,7 +84,13 @@ if (process.env.NODE_ENV === 'production') {
 
 // CORS Configuration - Allow all origins for now
 app.use(cors({
-  origin: true, // Allow all origins
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Allow all origins for now
+    return callback(null, true);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
@@ -140,6 +147,7 @@ app.use('/api/resources', authMiddleware, resourceRoutes);
 app.use('/api/analytics', authMiddleware, analyticsRoutes);
 app.use('/api/promotions', authMiddleware, promotionRoutes);
 app.use('/api/fee-reminders', authMiddleware, feeReminderRoutes);
+app.use('/api/timetable', authMiddleware, timetableRoutes);
 
 // Error handling middleware
 app.use(errorHandler);

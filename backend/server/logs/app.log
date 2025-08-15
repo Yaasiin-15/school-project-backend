@@ -8,3 +8,15 @@
 {"timestamp":"2025-08-13T18:06:41.979Z","level":"INFO","message":"Database reconnected"}
 {"timestamp":"2025-08-13T18:08:14.904Z","level":"WARN","message":"Database disconnected"}
 {"timestamp":"2025-08-13T18:09:36.171Z","level":"INFO","message":"Database reconnected"}
+{"timestamp":"2025-08-15T23:40:50.246Z","level":"INFO","message":"Database connected successfully","host":"ac-lfbnawa-shard-00-02.fvacpn1.mongodb.net","port":27017,"name":"school_management"}
+{"timestamp":"2025-08-15T23:40:50.265Z","level":"INFO","message":"Server started successfully","port":"3001","environment":"production"}
+{"timestamp":"2025-08-15T23:49:03.195Z","level":"INFO","message":"Database connected successfully","host":"ac-lfbnawa-shard-00-02.fvacpn1.mongodb.net","port":27017,"name":"school_management"}
+{"timestamp":"2025-08-15T23:49:03.222Z","level":"INFO","message":"Server started successfully","port":"3001","environment":"production"}
+{"timestamp":"2025-08-15T23:49:36.304Z","level":"INFO","message":"Database connected successfully","host":"ac-lfbnawa-shard-00-00.fvacpn1.mongodb.net","port":27017,"name":"school_management"}
+{"timestamp":"2025-08-15T23:49:36.316Z","level":"INFO","message":"Server started successfully","port":"3001","environment":"production"}
+{"timestamp":"2025-08-15T23:49:45.268Z","level":"INFO","message":"Database connected successfully","host":"ac-lfbnawa-shard-00-01.fvacpn1.mongodb.net","port":27017,"name":"school_management"}
+{"timestamp":"2025-08-15T23:49:45.281Z","level":"INFO","message":"Server started successfully","port":"3001","environment":"production"}
+{"timestamp":"2025-08-15T23:49:52.939Z","level":"INFO","message":"Database connected successfully","host":"ac-lfbnawa-shard-00-02.fvacpn1.mongodb.net","port":27017,"name":"school_management"}
+{"timestamp":"2025-08-15T23:49:52.951Z","level":"INFO","message":"Server started successfully","port":"3001","environment":"production"}
+{"timestamp":"2025-08-15T23:54:18.353Z","level":"INFO","message":"Database connected successfully","host":"ac-lfbnawa-shard-00-01.fvacpn1.mongodb.net","port":27017,"name":"school_management"}
+{"timestamp":"2025-08-15T23:54:18.365Z","level":"INFO","message":"Server started successfully","port":"3001","environment":"production"}

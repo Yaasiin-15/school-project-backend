@@ -125,16 +125,22 @@ router.post('/register', validateUserRegistration, async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+    
+    // Debug logging
+    console.log('Login attempt:', { email, hasPassword: !!password });
 
     // Check if user exists
     const user = await User.findOne({ email }).select('+password');
     if (!user) {
+      console.log('User not found for email:', email);
       logger.warn('Login attempt with non-existent email', { email, ip: req.ip });
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password'
       });
     }
+    
+    console.log('User found:', { id: user._id, email: user.email, role: user.role });
 
     // Check if user is active
     if (!user.isActive) {
