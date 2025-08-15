@@ -33,6 +33,8 @@ import financeRoutes from './routes/finance.js';
 import messageRoutes from './routes/messages.js';
 import resourceRoutes from './routes/resources.js';
 import analyticsRoutes from './routes/analytics.js';
+import promotionRoutes from './routes/promotions.js';
+import feeReminderRoutes from './routes/feeReminders.js';
 
 // Import middleware
 import authMiddleware from './middleware/auth.js';
@@ -136,6 +138,8 @@ app.use('/api/finance', authMiddleware, financeRoutes);
 app.use('/api/messages', authMiddleware, messageRoutes);
 app.use('/api/resources', authMiddleware, resourceRoutes);
 app.use('/api/analytics', authMiddleware, analyticsRoutes);
+app.use('/api/promotions', authMiddleware, promotionRoutes);
+app.use('/api/fee-reminders', authMiddleware, feeReminderRoutes);
 
 // Error handling middleware
 app.use(errorHandler);

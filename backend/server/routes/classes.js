@@ -829,4 +829,169 @@ router.delete('/schedule/:id', authorize('admin'), async (req, res) => {
   }
 });
 
+// @route   GET /api/classes/:id/export
+// @desc    Export class student list as CSV
+// @access  Private (Admin, Teacher)
+router.get('/:id/export', authorize('admin', 'teacher'), async (req, res) => {
+  try {
+    const { format = 'csv' } = req.query;
+    
+    const classData = await Class.findById(req.params.id)
+      .populate({
+        path: 'students',
+        select: 'name studentId email phone rollNumber dateOfBirth address parentInfo status',
+        populate: {
+          path: 'userId',
+          select: 'email'
+        }
+      });
+    
+    if (!classData) {
+      return res.status(404).json({
+        success: false,
+        message: 'Class not found'
+      });
+    }
+
+    if (format === 'csv') {
+      // Generate CSV content
+      const csvHeaders = [
+        'Student ID',
+        'Name',
+        'Roll Number',
+        'Email',
+        'Phone',
+        'Date of Birth',
+        'Address',
+        'Guardian Name',
+        'Guardian Phone',
+        'Status'
+      ];
+
+      const csvRows = classData.students.map(student => [
+        student.studentId || '',
+        student.name || '',
+        student.rollNumber || '',
+        student.email || '',
+        student.phone || '',
+        student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString() : '',
+        student.address ? `${student.address.street || ''}, ${student.address.city || ''}, ${student.address.state || ''}` : '',
+        student.parentInfo?.guardianName || '',
+        student.parentInfo?.guardianPhone || '',
+        student.status || 'active'
+      ]);
+
+      const csvContent = [
+        csvHeaders.join(','),
+        ...csvRows.map(row => row.map(field => `"${field}"`).join(','))
+      ].join('\n');
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${classData.name}-students-${new Date().toISOString().split('T')[0]}.csv"`);
+      res.send(csvContent);
+    } else {
+      // Return JSON format
+      res.json({
+        success: true,
+        data: {
+          class: {
+            name: classData.name,
+            section: classData.section,
+            grade: classData.grade,
+            teacherName: classData.teacherName,
+            room: classData.room,
+            academicYear: classData.academicYear
+          },
+          students: classData.students,
+          exportDate: new Date().toISOString(),
+          totalStudents: classData.students.length
+        }
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to export class list',
+      error: error.message
+    });
+  }
+});
+
+// @route   GET /api/classes/export/all
+// @desc    Export all classes with student counts
+// @access  Private (Admin)
+router.get('/export/all', authorize('admin'), async (req, res) => {
+  try {
+    const { format = 'csv', academicYear = '2024-25' } = req.query;
+    
+    const classes = await Class.find({ academicYear })
+      .populate('students', 'name studentId email status')
+      .populate('teacherId', 'name email')
+      .sort({ grade: 1, section: 1 });
+
+    if (format === 'csv') {
+      const csvHeaders = [
+        'Class Name',
+        'Section',
+        'Grade',
+        'Teacher',
+        'Room',
+        'Capacity',
+        'Current Students',
+        'Available Spots',
+        'Academic Year'
+      ];
+
+      const csvRows = classes.map(cls => [
+        cls.name || '',
+        cls.section || '',
+        cls.grade || '',
+        cls.teacherName || '',
+        cls.room || '',
+        cls.capacity || 0,
+        cls.students.length || 0,
+        (cls.capacity - cls.students.length) || 0,
+        cls.academicYear || ''
+      ]);
+
+      const csvContent = [
+        csvHeaders.join(','),
+        ...csvRows.map(row => row.map(field => `"${field}"`).join(','))
+      ].join('\n');
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="all-classes-${academicYear}-${new Date().toISOString().split('T')[0]}.csv"`);
+      res.send(csvContent);
+    } else {
+      res.json({
+        success: true,
+        data: {
+          classes: classes.map(cls => ({
+            id: cls._id,
+            name: cls.name,
+            section: cls.section,
+            grade: cls.grade,
+            teacherName: cls.teacherName,
+            room: cls.room,
+            capacity: cls.capacity,
+            currentStudents: cls.students.length,
+            availableSpots: cls.capacity - cls.students.length,
+            academicYear: cls.academicYear,
+            students: cls.students
+          })),
+          exportDate: new Date().toISOString(),
+          totalClasses: classes.length,
+          totalStudents: classes.reduce((sum, cls) => sum + cls.students.length, 0)
+        }
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to export all classes',
+      error: error.message
+    });
+  }
+});
+
 export default router;

@@ -23,6 +23,8 @@ import Announcement from '../models/Announcement.js';
 import Message from '../models/Message.js';
 import Resource from '../models/Resource.js';
 import Exam from '../models/Exam.js';
+import Promotion from '../models/Promotion.js';
+import FeeReminder from '../models/FeeReminder.js';
 
 const seedData = async () => {
   try {
@@ -43,6 +45,8 @@ const seedData = async () => {
     await Message.deleteMany({});
     await Resource.deleteMany({});
     await Exam.deleteMany({});
+    await Promotion.deleteMany({});
+    await FeeReminder.deleteMany({});
     
     console.log('✅ Cleared existing data');
 
