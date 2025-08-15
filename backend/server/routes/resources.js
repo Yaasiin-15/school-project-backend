@@ -179,35 +179,23 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req, res) =
     
     const { subject, grade, accessLevel, description } = req.body;
     
-    // Get file type from mimetype
-    const getFileType = (mimetype) => {
-      if (mimetype.includes('pdf')) return 'pdf';
-      if (mimetype.includes('word')) return 'document';
-      if (mimetype.includes('powerpoint') || mimetype.includes('presentation')) return 'presentation';
-      if (mimetype.includes('image')) return 'image';
-      if (mimetype.includes('video')) return 'video';
-      if (mimetype.includes('audio')) return 'audio';
-      return 'other';
-    };
-    
-    const newResource = {
-      _id: Date.now().toString(),
+    const newResource = new Resource({
       name: req.file.filename,
       originalName: req.file.originalname,
       type: getFileType(req.file.mimetype),
       size: req.file.size,
-      uploadedBy: req.user.name || 'Unknown User',
-      uploadedById: req.user.id,
-      uploadDate: new Date(),
-      downloads: 0,
+      formattedSize: formatFileSize(req.file.size),
+      uploadedBy: req.user._id,
+      uploadedByName: req.user.name || 'Unknown User',
       accessLevel: accessLevel || 'students',
       subject: subject || 'General',
       grade: grade || 'All Grades',
       description: description || '',
-      filePath: `/uploads/resources/${req.file.filename}`
-    };
+      filePath: `/uploads/resources/${req.file.filename}`,
+      downloads: 0
+    });
     
-    resources.push(newResource);
+    await newResource.save();
     
     res.status(201).json({
       success: true,
@@ -215,6 +203,10 @@ router.post('/upload', authMiddleware, upload.single('file'), async (req, res) =
       message: 'Resource uploaded successfully'
     });
   } catch (error) {
+    // Delete uploaded file if database save fails
+    if (req.file) {
+      fs.unlinkSync(req.file.path);
+    }
     res.status(500).json({
       success: false,
       message: 'Failed to upload resource',
@@ -228,7 +220,7 @@ router.get('/:resourceId/download', authMiddleware, async (req, res) => {
   try {
     const { resourceId } = req.params;
     
-    const resource = resources.find(r => r._id === resourceId);
+    const resource = await Resource.findById(resourceId);
     if (!resource) {
       return res.status(404).json({
         success: false,
@@ -253,19 +245,19 @@ router.get('/:resourceId/download', authMiddleware, async (req, res) => {
     }
     
     // Increment download count
-    const resourceIndex = resources.findIndex(r => r._id === resourceId);
-    if (resourceIndex !== -1) {
-      resources[resourceIndex].downloads += 1;
-    }
+    resource.downloads += 1;
+    await resource.save();
     
-    // In a real application, you would serve the actual file
-    // For now, we'll just return success
-    res.json({
-      success: true,
-      message: 'Download initiated',
-      downloadUrl: resource.filePath,
-      fileName: resource.originalName
-    });
+    // Serve the actual file
+    const filePath = path.join(process.cwd(), 'uploads', 'resources', resource.name);
+    if (fs.existsSync(filePath)) {
+      res.download(filePath, resource.originalName);
+    } else {
+      res.status(404).json({
+        success: false,
+        message: 'File not found on server'
+      });
+    }
   } catch (error) {
     res.status(500).json({
       success: false,
