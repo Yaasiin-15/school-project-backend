@@ -79,28 +79,9 @@ if (process.env.NODE_ENV === 'production') {
   app.use(morgan('dev'));
 }
 
-// CORS Configuration - More permissive for debugging
+// CORS Configuration - Allow all origins for now
 app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-
-    const allowedOrigins = [
-      'https://school-project-frontend-snowy.vercel.app',
-      'http://localhost:5173',
-      process.env.FRONTEND_URL
-    ].filter(Boolean);
-
-    console.log('CORS Origin check:', origin, 'Allowed:', allowedOrigins);
-
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    // For debugging, allow all origins temporarily
-    console.log('CORS: Allowing origin for debugging:', origin);
-    return callback(null, true);
-  },
+  origin: true, // Allow all origins
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],

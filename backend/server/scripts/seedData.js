@@ -270,7 +270,7 @@ const seedData = async () => {
     console.log('📢 Creating announcements...');
     const announcements = [
       {
-        title: 'Welcome to New Academic Year 2024-25',
+        title: 'Welcome to New Academic Year 2025-26',
         content: 'We welcome all students and faculty to the new academic year. Please check your schedules and be prepared for an exciting year ahead. New policies and procedures have been implemented for better learning experience.',
         author: admin.name,
         authorId: admin._id,
