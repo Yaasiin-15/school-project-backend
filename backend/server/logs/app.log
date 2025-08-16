@@ -21,3 +21,5 @@
 {"timestamp":"2025-08-15T23:54:18.353Z","level":"INFO","message":"Database connected successfully","host":"ac-lfbnawa-shard-00-01.fvacpn1.mongodb.net","port":27017,"name":"school_management"}
 {"timestamp":"2025-08-15T23:54:18.365Z","level":"INFO","message":"Server started successfully","port":"3001","environment":"production"}
 {"timestamp":"2025-08-15T23:57:19.826Z","level":"INFO","message":"Database connected successfully","host":"ac-lfbnawa-shard-00-01.fvacpn1.mongodb.net","port":27017,"name":"school_management"}
+{"timestamp":"2025-08-15T23:59:49.852Z","level":"INFO","message":"Database connected successfully","host":"ac-lfbnawa-shard-00-01.fvacpn1.mongodb.net","port":27017,"name":"school_management"}
+{"timestamp":"2025-08-15T23:59:49.895Z","level":"INFO","message":"Server started successfully","port":"3001","environment":"production"}
