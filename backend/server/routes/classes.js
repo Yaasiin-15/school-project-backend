@@ -2,7 +2,7 @@ import express from 'express';
 import Class from '../models/Class.js';
 import Teacher from '../models/Teacher.js';
 import Student from '../models/Student.js';
-import { authorize } from '../middleware/auth.js';
+import authMiddleware, { authorize } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -399,7 +399,7 @@ router.get('/schedule/teacher/me', authorize('teacher'), async (req, res) => {
 // @route   GET /api/classes/schedule
 // @desc    Get general schedule (accessible to all authenticated users)
 // @access  Private
-router.get('/schedule', authorize('admin', 'teacher', 'student'), async (req, res) => {
+router.get('/schedule', authMiddleware, async (req, res) => {
   try {
     const weekly = req.query.weekly === 'true';
     

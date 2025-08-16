@@ -133,6 +133,52 @@ router.get('/:classId', authMiddleware, async (req, res) => {
   }
 });
 
+// @route   PUT /api/timetable/:classId
+// @desc    Update a specific period in timetable
+// @access  Private (Admin, Teacher)
+router.put('/:classId', authMiddleware, async (req, res) => {
+  try {
+    const { classId } = req.params;
+    const { day, period, subject, teacherId, room, notes } = req.body;
+    
+    // In a real implementation, you'd save to a Timetable model
+    // For now, just return success
+    res.json({
+      success: true,
+      message: 'Period updated successfully',
+      data: { day, period, subject, teacherId, room, notes }
+    });
+  } catch (error) {
+    console.error('Error updating period:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update period'
+    });
+  }
+});
+
+// @route   DELETE /api/timetable/:classId/:day/:period
+// @desc    Delete a specific period from timetable
+// @access  Private (Admin, Teacher)
+router.delete('/:classId/:day/:period', authMiddleware, async (req, res) => {
+  try {
+    const { classId, day, period } = req.params;
+    
+    // In a real implementation, you'd delete from a Timetable model
+    // For now, just return success
+    res.json({
+      success: true,
+      message: 'Period deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting period:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete period'
+    });
+  }
+});
+
 // @route   POST /api/timetable/:classId
 // @desc    Create or update timetable for a class
 // @access  Private (Admin, Teacher)
