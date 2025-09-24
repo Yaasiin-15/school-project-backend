@@ -36,6 +36,10 @@ import analyticsRoutes from './routes/analytics.js';
 import promotionRoutes from './routes/promotions.js';
 import feeReminderRoutes from './routes/feeReminders.js';
 import timetableRoutes from './routes/timetable.js';
+import parentsRoutes from './routes/parents.js';
+import subjectsRoutes from './routes/subjects.js';
+import libraryRoutes from './routes/library.js';
+import transportRoutes from './routes/transport.js';
 
 // Import middleware
 import authMiddleware from './middleware/auth.js';
@@ -184,6 +188,10 @@ app.use('/api/analytics', authMiddleware, analyticsRoutes);
 app.use('/api/promotions', authMiddleware, promotionRoutes);
 app.use('/api/fee-reminders', authMiddleware, feeReminderRoutes);
 app.use('/api/timetable', authMiddleware, timetableRoutes);
+app.use('/api/parents', authMiddleware, parentsRoutes);
+app.use('/api/subjects', authMiddleware, subjectsRoutes);
+app.use('/api/library', authMiddleware, libraryRoutes);
+app.use('/api/transport', authMiddleware, transportRoutes);
 
 // Error handling middleware
 app.use(errorHandler);
