@@ -92,21 +92,33 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // Allow localhost and development origins
+    // Define allowed origins for production and development
     const allowedOrigins = [
+      // Development origins
       'http://localhost:5173',
       'http://localhost:3000',
       'http://127.0.0.1:5173',
-      'http://127.0.0.1:3000'
-    ];
+      'http://127.0.0.1:3000',
+      // Production origins
+      'https://school-project-frontend-snowy.vercel.app',
+      'https://school-backend-1ops.onrender.com',
+      // Add your custom domain if you have one
+      process.env.FRONTEND_URL
+    ].filter(Boolean); // Remove undefined values
     
-    // Allow all origins for development
+    // Check if origin is allowed
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // For development, allow all origins
     if (process.env.NODE_ENV === 'development') {
       return callback(null, true);
     }
     
-    // Allow all origins for now (can be restricted later)
-    return callback(null, true);
+    // Log rejected origins for debugging
+    console.log('CORS rejected origin:', origin);
+    return callback(new Error('Not allowed by CORS'), false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
