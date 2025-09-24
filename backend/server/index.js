@@ -108,11 +108,13 @@ app.use(cors({
     
     // Check if origin is allowed
     if (allowedOrigins.includes(origin)) {
+      console.log('CORS allowed origin:', origin);
       return callback(null, true);
     }
     
     // For development, allow all origins
     if (process.env.NODE_ENV === 'development') {
+      console.log('CORS allowed (development mode):', origin);
       return callback(null, true);
     }
     
@@ -140,9 +142,9 @@ app.use(cors({
 // Handle preflight requests explicitly
 app.options('*', cors());
 
-// Additional CORS headers middleware
+// Additional CORS headers middleware (removed conflicting wildcard origin)
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  // Don't override the CORS origin - let the cors middleware handle it
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
   
